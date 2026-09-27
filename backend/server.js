@@ -54,7 +54,32 @@ app.post("/login", (req, res) => {
         }
     );
 });
-app.post("/users", (req, res) => {
+const requireAdmin = (req, res, next) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({
+            message: "Chỉ Admin được thực hiện thao tác này"
+        });
+    }
+
+    next();
+};
+
+app.get("/users", authenticateToken, requireAdmin, (req, res) => {
+    db.all(
+        "SELECT id, username, role, employeeId, elevatorId FROM users ORDER BY id DESC",
+        (err, users) => {
+            if (err) {
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            res.json(users);
+        }
+    );
+});
+
+app.post("/users", authenticateToken, requireAdmin, (req, res) => {
     const {
         username,
         password,
@@ -63,42 +88,153 @@ app.post("/users", (req, res) => {
         elevatorId
     } = req.body;
 
-    db.run(
-        `INSERT INTO users
-        (
-            username,
-            password,
-            role,
-            employeeId,
-            elevatorId
-        )
-        VALUES (?, ?, ?, ?, ?)`,
-        [
-            username,
-            password,
-            role,
-            employeeId || null,
-            elevatorId || null
-        ],
-        function (err) {
-            if (err) {
-                if (err.message.includes("UNIQUE")) {
-                    return res.status(400).json({
-                        message: "Username đã tồn tại"
+    if (
+        !username?.trim() ||
+        !password ||
+        !["technician", "owner"].includes(role) ||
+        (role === "technician" && !employeeId?.trim()) ||
+        (role === "owner" && !elevatorId?.trim())
+    ) {
+        return res.status(400).json({
+            message: "Thông tin tài khoản không hợp lệ"
+        });
+    }
+
+    const createUser = () => {
+        db.run(
+            `INSERT INTO users
+            (
+                username,
+                password,
+                role,
+                employeeId,
+                elevatorId
+            )
+            VALUES (?, ?, ?, ?, ?)`,
+            [
+                username.trim(),
+                password,
+                role,
+                role === "technician" ? employeeId.trim() : null,
+                role === "owner" ? elevatorId.trim() : null
+            ],
+            function (err) {
+                if (err) {
+                    if (err.message.includes("UNIQUE")) {
+                        return res.status(400).json({
+                            message: "Username đã tồn tại"
+                        });
+                    }
+
+                    return res.status(500).json({
+                        message: "Lỗi database"
                     });
                 }
 
-                return res.status(500).json({
-                    message: "Lỗi database"
+                res.status(201).json({
+                    message: "Đã tạo tài khoản",
+                    id: this.lastID
                 });
             }
+        );
+    };
 
-            res.status(201).json({
-                message: "Đã tạo tài khoản",
-                id: this.lastID
-            });
-        }
-    );
+    if (role === "owner") {
+        db.get(
+            "SELECT elevatorId FROM elevators WHERE elevatorId = ?",
+            [elevatorId.trim()],
+            (err, elevator) => {
+                if (err) {
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!elevator) {
+                    return res.status(400).json({
+                        message: "Thang máy không tồn tại"
+                    });
+                }
+
+                createUser();
+            }
+        );
+    } else {
+        createUser();
+    }
+});
+
+app.patch("/users/:id", authenticateToken, requireAdmin, (req, res) => {
+    const {
+        role,
+        employeeId,
+        elevatorId
+    } = req.body;
+
+    if (
+        !["technician", "owner"].includes(role) ||
+        (role === "technician" && !employeeId?.trim()) ||
+        (role === "owner" && !elevatorId?.trim())
+    ) {
+        return res.status(400).json({
+            message: "Thông tin phân quyền không hợp lệ"
+        });
+    }
+
+    const update = () => {
+        db.run(
+            `UPDATE users
+             SET role = ?, employeeId = ?, elevatorId = ?
+             WHERE id = ? AND role != 'admin'`,
+            [
+                role,
+                role === "technician" ? employeeId.trim() : null,
+                role === "owner" ? elevatorId.trim() : null,
+                req.params.id
+            ],
+            function (err) {
+                if (err) {
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!this.changes) {
+                    return res.status(404).json({
+                        message: "Không tìm thấy tài khoản có thể phân quyền"
+                    });
+                }
+
+                res.json({
+                    message: "Đã cập nhật phân quyền"
+                });
+            }
+        );
+    };
+
+    if (role === "owner") {
+        db.get(
+            "SELECT elevatorId FROM elevators WHERE elevatorId = ?",
+            [elevatorId.trim()],
+            (err, elevator) => {
+                if (err) {
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!elevator) {
+                    return res.status(400).json({
+                        message: "Thang máy không tồn tại"
+                    });
+                }
+
+                update();
+            }
+        );
+    } else {
+        update();
+    }
 });
 app.get("/elevators", authenticateToken, (req, res) => {
     if (req.user.role === "owner") {
@@ -134,6 +270,104 @@ app.get("/elevators", authenticateToken, (req, res) => {
             }
 
             res.json(elevators);
+        }
+    );
+});
+const elevatorFields = [
+    "elevatorId",
+    "owner",
+    "location",
+    "city",
+    "manufacturer",
+    "installationDate",
+    "type",
+    "capacity",
+    "status",
+    "numberOfStops",
+    "speed",
+    "pitDepth",
+    "overheadHeight",
+    "driveType"
+];
+
+const elevatorValues = body =>
+    elevatorFields.map(field => {
+        const value = body[field];
+        return value === "" || value === undefined ? null : value;
+    });
+
+app.post("/elevators", authenticateToken, requireAdmin, (req, res) => {
+    if (
+        !["elevatorId", "owner", "location", "city"].every(field =>
+            String(req.body[field] || "").trim()
+        )
+    ) {
+        return res.status(400).json({
+            message: "Vui lòng nhập mã, chủ sở hữu, địa điểm và thành phố"
+        });
+    }
+
+    db.run(
+        `INSERT INTO elevators (${elevatorFields.join(", ")})
+         VALUES (${elevatorFields.map(() => "?").join(", ")})`,
+        elevatorValues(req.body),
+        function (err) {
+            if (err?.message.includes("UNIQUE")) {
+                return res.status(400).json({
+                    message: "Mã thang máy đã tồn tại"
+                });
+            }
+
+            if (err) {
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            res.status(201).json({
+                message: "Đã thêm thang máy"
+            });
+        }
+    );
+});
+
+app.put("/elevators/:elevatorId", authenticateToken, requireAdmin, (req, res) => {
+    if (
+        !["owner", "location", "city"].every(field =>
+            String(req.body[field] || "").trim()
+        )
+    ) {
+        return res.status(400).json({
+            message: "Vui lòng nhập chủ sở hữu, địa điểm và thành phố"
+        });
+    }
+
+    const editableFields = elevatorFields.slice(1);
+
+    db.run(
+        `UPDATE elevators
+         SET ${editableFields.map(field => `${field} = ?`).join(", ")}
+         WHERE elevatorId = ?`,
+        [
+            ...elevatorValues(req.body).slice(1),
+            req.params.elevatorId
+        ],
+        function (err) {
+            if (err) {
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            if (!this.changes) {
+                return res.status(404).json({
+                    message: "Không tìm thấy thang máy"
+                });
+            }
+
+            res.json({
+                message: "Đã cập nhật thang máy"
+            });
         }
     );
 });

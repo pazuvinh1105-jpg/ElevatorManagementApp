@@ -60,10 +60,12 @@ const LoginScreen = ({navigation}: Props) => {
     {
       text: 'OK',
       onPress: () => {
-        if (data.user.role === 'technician') {
-          navigation.navigate('ElevatorSearch');
+        if (data.user.role === 'admin') {
+           navigation.navigate('AdminHome');
+        } else if (data.user.role === 'technician') {
+           navigation.navigate('ElevatorSearch');
         } else if (data.user.role === 'owner') {
-          navigation.navigate('OwnerHome');
+           navigation.navigate('OwnerHome');
         }
       },
     },
