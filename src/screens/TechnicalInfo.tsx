@@ -11,25 +11,67 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const TechnicalInfo = () => {
+const TechnicalInfo = ({route}: any) => {
+  const selectedElevatorId = route.params?.elevatorId;
   const [elevator, setElevator] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getElevator = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
+  const getElevator = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
 
-        if (!token) {
+      if (!token) {
+        Alert.alert(
+          'Lỗi',
+          'Không tìm thấy thông tin đăng nhập.',
+        );
+        return;
+      }
+
+      let elevatorId = selectedElevatorId;
+
+      // Nếu Technician đã chọn thang máy
+      if (elevatorId) {
+        const response = await fetch(
+          'http://127.0.0.1:3000/elevators',
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
           Alert.alert(
             'Lỗi',
-            'Không tìm thấy thông tin đăng nhập.',
+            data.message ||
+              'Không lấy được thông tin thang máy.',
           );
           return;
         }
 
+        const selectedElevator = data.find(
+          (item: any) =>
+            item.elevatorId === elevatorId,
+        );
+
+        if (selectedElevator) {
+          setElevator(selectedElevator);
+        } else {
+          Alert.alert(
+            'Thông báo',
+            'Không tìm thấy thang máy được chọn.',
+          );
+        }
+      } else {
+        // Owner: không truyền elevatorId
+        // nên lấy thang máy được phân quyền
         const response = await fetch(
-          'http://192.168.0.104:3000/elevators',
+          'http://127.0.0.1:3000/elevators',
           {
             method: 'GET',
             headers: {
@@ -57,23 +99,24 @@ const TechnicalInfo = () => {
             'Không tìm thấy thang máy được phân quyền.',
           );
         }
-      } catch (error) {
-        console.error(
-          'Lỗi lấy thông số kỹ thuật:',
-          error,
-        );
-
-        Alert.alert(
-          'Lỗi kết nối',
-          'Không thể kết nối tới Backend.',
-        );
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error(
+        'Lỗi lấy thông số kỹ thuật:',
+        error,
+      );
 
-    getElevator();
-  }, []);
+      Alert.alert(
+        'Lỗi kết nối',
+        'Không thể kết nối tới Backend.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  getElevator();
+}, [selectedElevatorId]);
 
   return (
     <ImageBackground
