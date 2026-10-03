@@ -26,8 +26,8 @@ const fields: {key: Field; label: string; numeric?: boolean; placeholder?: strin
   {key: 'status', label: 'Trạng thái'},
   {key: 'numberOfStops', label: 'Số điểm dừng', numeric: true, placeholder: '2-50'},
   {key: 'speed', label: 'Tốc độ', numeric: true},
-  {key: 'pitDepth', label: 'Độ sâu hố pit (cm)', numeric: true, placeholder: '20-3000 cm'},
-  {key: 'overheadHeight', label: 'Chiều cao OH (cm)', numeric: true, placeholder: '50-3000 cm'},
+  {key: 'pitDepth', label: 'Độ sâu hố pit (mm)', numeric: true, placeholder: '200-3000 mm'},
+  {key: 'overheadHeight', label: 'Chiều cao OH (mm)', numeric: true, placeholder: '500-3000 mm'},
   {key: 'driveType', label: 'Loại truyền động'},
 ];
 
@@ -66,8 +66,8 @@ const AdminElevatorForm = ({navigation, route}: Props) => {
     const pitDepth = Number(values.pitDepth);
     const overheadHeight = Number(values.overheadHeight);
     if (!Number.isInteger(stops) || stops < 2 || stops > 50 ||
-        pitDepth < 20 || pitDepth > 3000 || overheadHeight < 50 || overheadHeight > 3000) {
-      setError('Số điểm dừng phải từ 2-50; hố pit từ 20-3000 cm; chiều cao OH từ 50-3000 cm.');
+        pitDepth < 200 || pitDepth > 3000 || overheadHeight < 500 || overheadHeight > 3000) {
+      setError('Số điểm dừng phải từ 2-50; hố pit từ 200-3000 mm; chiều cao OH từ 500-3000 mm.');
       return;
     }
     if (!speeds.includes(values.speed) && !speeds.some(speed => Number(speed) === Number(values.speed))) {

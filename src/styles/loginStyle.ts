@@ -31,51 +31,10 @@ export default StyleSheet.create({
   },
 
   logo: {
-    width: 70,
-    height: 70,
-    backgroundColor: '#087FEA',
-    borderRadius: 17,
+    width: 88,
+    height: 88,
     alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 12,
-
-    elevation: 5,
-    shadowColor: '#087FEA',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-  },
-
-  logoArrow: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-
-  elevatorDoor: {
-    width: 38,
-    height: 29,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    borderBottomWidth: 0,
-    flexDirection: 'row',
-  },
-
-  doorLeft: {
-    flex: 1,
-    borderRightWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-
-  doorRight: {
-    flex: 1,
-    borderLeftWidth: 1.5,
-    borderColor: '#FFFFFF',
   },
 
   appTitle: {

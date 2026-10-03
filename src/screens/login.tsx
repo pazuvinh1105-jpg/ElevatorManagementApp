@@ -3,6 +3,7 @@ import {useAuth} from '../navigation/AuthContext';
 import styles from '../styles/loginStyle';
 import {
   Alert,
+  Image,
   ImageBackground,
   SafeAreaView,
   ScrollView,
@@ -78,14 +79,11 @@ const LoginScreen = ({}: Props) => {
             <View style={styles.container}>
 
               {/* Logo */}
-              <View style={styles.logo}>
-                <Text style={styles.logoArrow}>↑ ↓</Text>
-
-                <View style={styles.elevatorDoor}>
-                  <View style={styles.doorLeft} />
-                  <View style={styles.doorRight} />
-                </View>
-              </View>
+              <Image
+                source={require('../../assets/login-logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
 
               {/* App name */}
               <Text style={styles.appTitle}>

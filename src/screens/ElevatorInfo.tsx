@@ -215,7 +215,7 @@ const ElevatorInfo = ({route}: Props) => {
                 </Text>
 
                 <Text style={styles.value}>
-                  {elevator.capacity}
+                  {elevator.capacity} kg
                 </Text>
               </View>
 
