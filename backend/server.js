@@ -456,6 +456,983 @@ app.post("/elevators/:elevatorId/inspections", authenticateToken, (req, res) => 
         }
     );
 });
+// =====================================================
+// MAINTENANCE CHECKLIST API
+// =====================================================
+
+// Lấy checklist theo lần bảo trì
+app.get("/maintenance/checklists/:round", authenticateToken, (req, res) => {
+    const round = Number(req.params.round);
+
+    // Chỉ chấp nhận lần bảo trì 1, 2 hoặc 3
+    if (![1, 2, 3].includes(round)) {
+        return res.status(400).json({
+            message: "Lần bảo trì không hợp lệ. Chỉ chấp nhận 1, 2 hoặc 3."
+        });
+    }
+
+    db.all(
+        `
+        SELECT
+            id,
+            code,
+            round,
+            section,
+            content
+        FROM maintenance_checklists
+        WHERE round = 0 OR round = ?
+        ORDER BY id ASC
+        `,
+        [round],
+        (err, checklists) => {
+            if (err) {
+                console.error("Lỗi lấy checklist:", err.message);
+
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            res.json({
+                round,
+                total: checklists.length,
+                checklists
+            });
+        }
+    );
+});
+// =====================================================
+// TẠO LẦN BẢO TRÌ + LƯU KẾT QUẢ CHECKLIST
+// =====================================================
+
+app.post("/elevators/:elevatorId/maintenance", authenticateToken, (req, res) => {
+    // Chỉ Technician mới được tạo phiếu bảo trì
+    if (req.user.role !== "technician") {
+        return res.status(403).json({
+            message: "Chỉ Technician mới được tạo phiếu bảo trì"
+        });
+    }
+
+    const { elevatorId } = req.params;
+    const { round, date, description, results } = req.body;
+
+    // ---------------------------------------------
+    // 1. Kiểm tra lần bảo trì
+    // ---------------------------------------------
+    const maintenanceRound = Number(round);
+
+    if (![1, 2, 3].includes(maintenanceRound)) {
+        return res.status(400).json({
+            message: "Lần bảo trì không hợp lệ. Chỉ chấp nhận lần 1, 2 hoặc 3."
+        });
+    }
+
+    // ---------------------------------------------
+    // 2. Kiểm tra ngày bảo trì
+    // ---------------------------------------------
+    if (!date) {
+        return res.status(400).json({
+            message: "Thiếu ngày bảo trì"
+        });
+    }
+
+    // ---------------------------------------------
+    // 3. Kiểm tra danh sách kết quả
+    // ---------------------------------------------
+    if (!Array.isArray(results)) {
+        return res.status(400).json({
+            message: "Danh sách kết quả checklist không hợp lệ"
+        });
+    }
+
+    // Số checklist cần có:
+    // Lần 1 = A + B = 16 + 22 = 38
+    // Lần 2 = A + C = 16 + 35 = 51
+    // Lần 3 = A + D = 16 + 24 = 40
+
+    const expectedCounts = {
+        1: 38,
+        2: 51,
+        3: 40
+    };
+
+    const expectedCount = expectedCounts[maintenanceRound];
+
+    if (results.length !== expectedCount) {
+        return res.status(400).json({
+            message: `Lần bảo trì ${maintenanceRound} yêu cầu đúng ${expectedCount} checklist`
+        });
+    }
+
+    // ---------------------------------------------
+    // 4. Kiểm tra từng kết quả
+    // ---------------------------------------------
+    for (const item of results) {
+        if (
+            !item ||
+            item.checklistId === undefined ||
+            !["pass", "fail"].includes(item.result)
+        ) {
+            return res.status(400).json({
+                message: "Mỗi checklist phải có checklistId và kết quả pass/fail"
+            });
+        }
+    }
+
+    // ---------------------------------------------
+    // 5. Kiểm tra thang máy tồn tại
+    // ---------------------------------------------
+    db.get(
+        "SELECT elevatorId FROM elevators WHERE elevatorId = ?",
+        [elevatorId],
+        (err, elevator) => {
+            if (err) {
+                console.error("Lỗi kiểm tra thang máy:", err.message);
+
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            if (!elevator) {
+                return res.status(404).json({
+                    message: "Không tìm thấy thang máy"
+                });
+            }
+
+            // ---------------------------------------------
+            // 6. Kiểm tra checklist có đúng với lần bảo trì
+            // ---------------------------------------------
+            const checklistIds = results.map(
+                item => Number(item.checklistId)
+            );
+
+            // Không cho phép checklist bị trùng
+            const uniqueIds = new Set(checklistIds);
+
+            if (uniqueIds.size !== results.length) {
+                return res.status(400).json({
+                    message: "Danh sách checklist không được chứa ID trùng nhau"
+                });
+            }
+
+            const placeholders = checklistIds.map(() => "?").join(",");
+
+            db.all(
+                `
+                SELECT id
+                FROM maintenance_checklists
+                WHERE id IN (${placeholders})
+                  AND (round = 0 OR round = ?)
+                `,
+                [...checklistIds, maintenanceRound],
+                (err, validChecklists) => {
+                    if (err) {
+                        console.error(
+                            "Lỗi kiểm tra checklist:",
+                            err.message
+                        );
+
+                        return res.status(500).json({
+                            message: "Lỗi database"
+                        });
+                    }
+
+                    if (validChecklists.length !== results.length) {
+                        return res.status(400).json({
+                            message:
+                                "Có checklist không thuộc lần bảo trì đã chọn"
+                        });
+                    }
+
+                    // ---------------------------------------------
+                    // 7. Bắt đầu transaction
+                    // ---------------------------------------------
+                    db.run("BEGIN TRANSACTION", (err) => {
+                        if (err) {
+                            console.error(
+                                "Lỗi bắt đầu transaction:",
+                                err.message
+                            );
+
+                            return res.status(500).json({
+                                message: "Không thể bắt đầu giao dịch"
+                            });
+                        }
+
+                        // ---------------------------------------------
+                        // 8. Tạo service_history
+                        // ---------------------------------------------
+                        db.run(
+                            `
+                            INSERT INTO service_history
+                            (elevatorId, technicianId, type, date, description)
+                            VALUES (?, ?, ?, ?, ?)
+                            `,
+                            [
+                                elevatorId,
+                                req.user.employeeId,
+                                "maintenance",
+                                date,
+                                description || null
+                            ],
+                            function (err) {
+                                if (err) {
+                                    return db.run(
+                                        "ROLLBACK",
+                                        () => {
+                                            console.error(
+                                                "Lỗi tạo lịch sử bảo trì:",
+                                                err.message
+                                            );
+
+                                            res.status(500).json({
+                                                message: "Lỗi database"
+                                            });
+                                        }
+                                    );
+                                }
+
+                                const serviceId = this.lastID;
+
+                                // ---------------------------------------------
+                                // 9. Lưu từng kết quả checklist
+                                // ---------------------------------------------
+                                const insertResult = db.prepare(
+                                    `
+                                    INSERT INTO maintenance_checklist_results
+                                    (serviceId, checklistId, result)
+                                    VALUES (?, ?, ?)
+                                    `
+                                );
+
+                                let hasError = false;
+
+                                for (const item of results) {
+                                    insertResult.run(
+                                        [
+                                            serviceId,
+                                            Number(item.checklistId),
+                                            item.result
+                                        ],
+                                        (err) => {
+                                            if (err && !hasError) {
+                                                hasError = true;
+
+                                                insertResult.finalize(() => {
+                                                    db.run(
+                                                        "ROLLBACK",
+                                                        () => {
+                                                            console.error(
+                                                                "Lỗi lưu kết quả checklist:",
+                                                                err.message
+                                                            );
+
+                                                            res.status(500).json({
+                                                                message:
+                                                                    "Lỗi lưu kết quả checklist"
+                                                            });
+                                                        }
+                                                    );
+                                                });
+                                            }
+                                        }
+                                    );
+                                }
+
+                                if (hasError) {
+                                    return;
+                                }
+
+                                insertResult.finalize((err) => {
+                                    if (err) {
+                                        return db.run(
+                                            "ROLLBACK",
+                                            () => {
+                                                console.error(
+                                                    "Lỗi hoàn tất checklist:",
+                                                    err.message
+                                                );
+
+                                                res.status(500).json({
+                                                    message: "Lỗi database"
+                                                });
+                                            }
+                                        );
+                                    }
+
+                                    // ---------------------------------------------
+                                    // 10. Commit
+                                    // ---------------------------------------------
+                                    db.run("COMMIT", (err) => {
+                                        if (err) {
+                                            return db.run(
+                                                "ROLLBACK",
+                                                () => {
+                                                    console.error(
+                                                        "Lỗi commit:",
+                                                        err.message
+                                                    );
+
+                                                    res.status(500).json({
+                                                        message:
+                                                            "Không thể lưu phiếu bảo trì"
+                                                    });
+                                                }
+                                            );
+                                        }
+
+                                        res.status(201).json({
+                                            message:
+                                                "Đã tạo phiếu bảo trì thành công",
+                                            serviceId,
+                                            round: maintenanceRound,
+                                            total: results.length
+                                        });
+                                    });
+                                });
+                            }
+                        );
+                    });
+                }
+            );
+        }
+    );
+});
+// =====================================================
+// LẤY CHI TIẾT MỘT PHIẾU BẢO TRÌ
+// =====================================================
+
+app.get(
+    "/elevators/:elevatorId/maintenance/:serviceId",
+    authenticateToken,
+    (req, res) => {
+        const { elevatorId, serviceId } = req.params;
+
+        // ---------------------------------------------
+        // 1. Lấy thông tin phiếu bảo trì
+        // ---------------------------------------------
+        db.get(
+            `
+            SELECT
+                sh.id,
+                sh.elevatorId,
+                sh.technicianId,
+                sh.type,
+                sh.date,
+                sh.description
+            FROM service_history sh
+            WHERE sh.id = ?
+              AND sh.elevatorId = ?
+              AND sh.type = 'maintenance'
+            `,
+            [serviceId, elevatorId],
+            (err, service) => {
+                if (err) {
+                    console.error(
+                        "Lỗi lấy phiếu bảo trì:",
+                        err.message
+                    );
+
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!service) {
+                    return res.status(404).json({
+                        message: "Không tìm thấy phiếu bảo trì"
+                    });
+                }
+
+                // ---------------------------------------------
+                // 2. Lấy danh sách checklist + kết quả
+                // ---------------------------------------------
+                db.all(
+                    `
+                    SELECT
+                        mc.id AS checklistId,
+                        mc.code,
+                        mc.round,
+                        mc.section,
+                        mc.content,
+                        mcr.result
+                    FROM maintenance_checklist_results mcr
+                    JOIN maintenance_checklists mc
+                        ON mc.id = mcr.checklistId
+                    WHERE mcr.serviceId = ?
+                    ORDER BY mc.id ASC
+                    `,
+                    [serviceId],
+                    (err, results) => {
+                        if (err) {
+                            console.error(
+                                "Lỗi lấy kết quả checklist:",
+                                err.message
+                            );
+
+                            return res.status(500).json({
+                                message: "Lỗi database"
+                            });
+                        }
+
+                        // ---------------------------------------------
+                        // 3. Xác định lần bảo trì
+                        // ---------------------------------------------
+                        const roundItems = results.filter(
+                            item => item.round !== 0
+                        );
+
+                        let round = null;
+
+                        if (roundItems.length > 0) {
+                            round = roundItems[0].round;
+                        }
+
+                        // ---------------------------------------------
+                        // 4. Trả dữ liệu
+                        // ---------------------------------------------
+                        res.json({
+                            service: {
+                                id: service.id,
+                                elevatorId: service.elevatorId,
+                                technicianId: service.technicianId,
+                                type: service.type,
+                                date: service.date,
+                                description: service.description,
+                                round
+                            },
+                            results
+                        });
+                    }
+                );
+            }
+        );
+    }
+);
+// =====================================================
+// CẬP NHẬT MỘT PHIẾU BẢO TRÌ
+// Technician + Admin được phép sửa
+// Owner không được phép sửa
+// =====================================================
+
+// =====================================================
+// CẬP NHẬT MỘT PHIẾU BẢO TRÌ
+// Technician + Admin được phép sửa
+// Owner không được phép sửa
+// =====================================================
+
+app.put(
+    "/elevators/:elevatorId/maintenance/:serviceId",
+    authenticateToken,
+    (req, res) => {
+        // -------------------------------------------------
+        // 1. Kiểm tra quyền
+        // -------------------------------------------------
+
+        if (!["technician", "admin"].includes(req.user.role)) {
+            return res.status(403).json({
+                message: "Chỉ Technician hoặc Admin được sửa phiếu bảo trì"
+            });
+        }
+
+        const { elevatorId, serviceId } = req.params;
+        const { date, description, results } = req.body;
+
+        // -------------------------------------------------
+        // 2. Kiểm tra dữ liệu đầu vào
+        // -------------------------------------------------
+
+        if (!date) {
+            return res.status(400).json({
+                message: "Thiếu ngày bảo trì"
+            });
+        }
+
+        if (!Array.isArray(results)) {
+            return res.status(400).json({
+                message: "Danh sách kết quả checklist không hợp lệ"
+            });
+        }
+
+        if (results.length === 0) {
+            return res.status(400).json({
+                message: "Phiếu bảo trì phải có checklist"
+            });
+        }
+
+        // -------------------------------------------------
+        // 3. Kiểm tra phiếu bảo trì có tồn tại
+        // -------------------------------------------------
+
+        db.get(
+            `
+            SELECT id
+            FROM service_history
+            WHERE id = ?
+              AND elevatorId = ?
+              AND type = 'maintenance'
+            `,
+            [serviceId, elevatorId],
+            (err, service) => {
+                if (err) {
+                    console.error(
+                        "Lỗi kiểm tra phiếu bảo trì:",
+                        err.message
+                    );
+
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!service) {
+                    return res.status(404).json({
+                        message: "Không tìm thấy phiếu bảo trì"
+                    });
+                }
+
+                // -------------------------------------------------
+                // 4. Kiểm tra checklist hiện tại của phiếu
+                //    để xác định Round
+                // -------------------------------------------------
+
+                db.all(
+                    `
+                    SELECT
+                        mcr.checklistId,
+                        mc.round
+                    FROM maintenance_checklist_results mcr
+                    JOIN maintenance_checklists mc
+                        ON mc.id = mcr.checklistId
+                    WHERE mcr.serviceId = ?
+                    `,
+                    [serviceId],
+                    (err, currentResults) => {
+                        if (err) {
+                            console.error(
+                                "Lỗi kiểm tra checklist hiện tại:",
+                                err.message
+                            );
+
+                            return res.status(500).json({
+                                message: "Lỗi database"
+                            });
+                        }
+
+                        if (!currentResults || currentResults.length === 0) {
+                            return res.status(400).json({
+                                message:
+                                    "Không xác định được Round của phiếu bảo trì"
+                            });
+                        }
+
+                        // -------------------------------------------------
+                        // Tìm Round bảo trì
+                        // Round 0 = checklist dùng chung
+                        // Round 1/2/3 = checklist riêng của từng vòng
+                        // -------------------------------------------------
+
+                        const specificRounds = [
+                            ...new Set(
+                                currentResults
+                                    .map(item => Number(item.round))
+                                    .filter(round => round !== 0)
+                            )
+                        ];
+
+                        if (specificRounds.length !== 1) {
+                            return res.status(400).json({
+                                message:
+                                    "Dữ liệu phiếu bảo trì không xác định được Round hợp lệ"
+                            });
+                        }
+
+                        const maintenanceRound = specificRounds[0];
+
+                        // -------------------------------------------------
+                        // 5. Xác định số checklist bắt buộc
+                        // -------------------------------------------------
+
+                        const expectedCounts = {
+                            1: 38,
+                            2: 51,
+                            3: 40
+                        };
+
+                        const expectedCount =
+                            expectedCounts[maintenanceRound];
+
+                        if (!expectedCount) {
+                            return res.status(400).json({
+                                message:
+                                    "Round bảo trì không hợp lệ"
+                            });
+                        }
+
+                        // -------------------------------------------------
+                        // 6. Kiểm tra số lượng checklist gửi lên
+                        // -------------------------------------------------
+
+                        if (results.length !== expectedCount) {
+                            return res.status(400).json({
+                                message:
+                                    `Round ${maintenanceRound} phải có đúng ${expectedCount} checklist`
+                            });
+                        }
+
+                        // -------------------------------------------------
+                        // 7. Kiểm tra từng checklist
+                        // -------------------------------------------------
+
+                        for (const item of results) {
+                            const checklistId = Number(
+                                item?.checklistId
+                            );
+
+                            if (
+                                !Number.isInteger(checklistId) ||
+                                checklistId <= 0 ||
+                                !["pass", "fail"].includes(item?.result)
+                            ) {
+                                return res.status(400).json({
+                                    message:
+                                        "Mỗi checklist phải có checklistId hợp lệ và kết quả pass/fail"
+                                });
+                            }
+                        }
+
+                        // -------------------------------------------------
+                        // 8. Kiểm tra checklist không bị trùng
+                        // -------------------------------------------------
+
+                        const checklistIds = results.map(item =>
+                            Number(item.checklistId)
+                        );
+
+                        const uniqueIds = new Set(checklistIds);
+
+                        if (uniqueIds.size !== results.length) {
+                            return res.status(400).json({
+                                message:
+                                    "Danh sách checklist không được chứa ID trùng nhau"
+                            });
+                        }
+
+                        // -------------------------------------------------
+                        // 9. Lấy toàn bộ checklist bắt buộc của Round
+                        //    Bao gồm:
+                        //    - Round 0: checklist dùng chung
+                        //    - Round hiện tại: checklist riêng
+                        // -------------------------------------------------
+
+                        db.all(
+                            `
+                            SELECT id
+                            FROM maintenance_checklists
+                            WHERE round = 0
+                               OR round = ?
+                            ORDER BY id
+                            `,
+                            [maintenanceRound],
+                            (err, expectedChecklists) => {
+                                if (err) {
+                                    console.error(
+                                        "Lỗi lấy checklist bắt buộc:",
+                                        err.message
+                                    );
+
+                                    return res.status(500).json({
+                                        message: "Lỗi database"
+                                    });
+                                }
+
+                                // -------------------------------------------------
+                                // 10. Kiểm tra database có đúng số checklist
+                                //     cho Round hay không
+                                // -------------------------------------------------
+
+                                if (
+                                    expectedChecklists.length !==
+                                    expectedCount
+                                ) {
+                                    return res.status(500).json({
+                                        message:
+                                            `Cấu hình checklist Round ${maintenanceRound} không hợp lệ`
+                                    });
+                                }
+
+                                // -------------------------------------------------
+                                // 11. Tạo Set checklist bắt buộc
+                                // -------------------------------------------------
+
+                                const expectedChecklistIds =
+                                    new Set(
+                                        expectedChecklists.map(
+                                            item => Number(item.id)
+                                        )
+                                    );
+
+                                // -------------------------------------------------
+                                // 12. Kiểm tra submitted checklist có đúng
+                                //     toàn bộ bộ checklist hay không
+                                // -------------------------------------------------
+
+                                for (const checklistId of checklistIds) {
+                                    if (
+                                        !expectedChecklistIds.has(
+                                            checklistId
+                                        )
+                                    ) {
+                                        return res.status(400).json({
+                                            message:
+                                                `Checklist ID ${checklistId} không thuộc Round ${maintenanceRound}`
+                                        });
+                                    }
+                                }
+
+                                // -------------------------------------------------
+                                // 13. Kiểm tra có thiếu checklist hay không
+                                // -------------------------------------------------
+
+                                for (const expectedId of expectedChecklistIds) {
+                                    if (!uniqueIds.has(expectedId)) {
+                                        return res.status(400).json({
+                                            message:
+                                                `Thiếu checklist ID ${expectedId} của Round ${maintenanceRound}`
+                                        });
+                                    }
+                                }
+
+                                // -------------------------------------------------
+                                // 14. Bắt đầu transaction
+                                // -------------------------------------------------
+
+                                db.run(
+                                    "BEGIN TRANSACTION",
+                                    err => {
+                                        if (err) {
+                                            console.error(
+                                                "Lỗi bắt đầu transaction:",
+                                                err.message
+                                            );
+
+                                            return res.status(500).json({
+                                                message:
+                                                    "Không thể bắt đầu giao dịch"
+                                            });
+                                        }
+
+                                        // -------------------------------------------------
+                                        // 15. Cập nhật thông tin phiếu
+                                        // -------------------------------------------------
+
+                                        db.run(
+                                            `
+                                            UPDATE service_history
+                                            SET date = ?,
+                                                description = ?
+                                            WHERE id = ?
+                                              AND elevatorId = ?
+                                              AND type = 'maintenance'
+                                            `,
+                                            [
+                                                date,
+                                                description || null,
+                                                serviceId,
+                                                elevatorId
+                                            ],
+                                            function (err) {
+                                                if (err) {
+                                                    return db.run(
+                                                        "ROLLBACK",
+                                                        () => {
+                                                            console.error(
+                                                                "Lỗi cập nhật phiếu:",
+                                                                err.message
+                                                            );
+
+                                                            res.status(500).json({
+                                                                message:
+                                                                    "Lỗi database"
+                                                            });
+                                                        }
+                                                    );
+                                                }
+
+                                                // -------------------------------------------------
+                                                // 16. Xóa kết quả checklist cũ
+                                                // -------------------------------------------------
+
+                                                db.run(
+                                                    `
+                                                    DELETE FROM maintenance_checklist_results
+                                                    WHERE serviceId = ?
+                                                    `,
+                                                    [serviceId],
+                                                    err => {
+                                                        if (err) {
+                                                            return db.run(
+                                                                "ROLLBACK",
+                                                                () => {
+                                                                    console.error(
+                                                                        "Lỗi xóa kết quả checklist cũ:",
+                                                                        err.message
+                                                                    );
+
+                                                                    res.status(500).json({
+                                                                        message:
+                                                                            "Lỗi database"
+                                                                    });
+                                                                }
+                                                            );
+                                                        }
+
+                                                        // -------------------------------------------------
+                                                        // 17. Thêm lại toàn bộ checklist mới
+                                                        // -------------------------------------------------
+
+                                                        const insertResult =
+                                                            db.prepare(
+                                                                `
+                                                                INSERT INTO maintenance_checklist_results
+                                                                (serviceId, checklistId, result)
+                                                                VALUES (?, ?, ?)
+                                                                `
+                                                            );
+
+                                                        let hasError = false;
+
+                                                        for (const item of results) {
+                                                            insertResult.run(
+                                                                [
+                                                                    serviceId,
+                                                                    Number(
+                                                                        item.checklistId
+                                                                    ),
+                                                                    item.result
+                                                                ],
+                                                                err => {
+                                                                    if (
+                                                                        err &&
+                                                                        !hasError
+                                                                    ) {
+                                                                        hasError = true;
+
+                                                                        insertResult.finalize(
+                                                                            () => {
+                                                                                db.run(
+                                                                                    "ROLLBACK",
+                                                                                    () => {
+                                                                                        console.error(
+                                                                                            "Lỗi lưu checklist mới:",
+                                                                                            err.message
+                                                                                        );
+
+                                                                                        res.status(
+                                                                                            500
+                                                                                        ).json({
+                                                                                            message:
+                                                                                                "Lỗi lưu kết quả checklist"
+                                                                                        });
+                                                                                    }
+                                                                                );
+                                                                            }
+                                                                        );
+                                                                    }
+                                                                }
+                                                            );
+                                                        }
+
+                                                        if (hasError) {
+                                                            return;
+                                                        }
+
+                                                        // -------------------------------------------------
+                                                        // 18. Hoàn tất INSERT
+                                                        // -------------------------------------------------
+
+                                                        insertResult.finalize(
+                                                            err => {
+                                                                if (err) {
+                                                                    return db.run(
+                                                                        "ROLLBACK",
+                                                                        () => {
+                                                                            console.error(
+                                                                                "Lỗi hoàn tất checklist:",
+                                                                                err.message
+                                                                            );
+
+                                                                            res.status(
+                                                                                500
+                                                                            ).json({
+                                                                                message:
+                                                                                    "Lỗi database"
+                                                                            });
+                                                                        }
+                                                                    );
+                                                                }
+
+                                                                // -------------------------------------------------
+                                                                // 19. COMMIT
+                                                                // -------------------------------------------------
+
+                                                                db.run(
+                                                                    "COMMIT",
+                                                                    err => {
+                                                                        if (err) {
+                                                                            return db.run(
+                                                                                "ROLLBACK",
+                                                                                () => {
+                                                                                    console.error(
+                                                                                        "Lỗi commit:",
+                                                                                        err.message
+                                                                                    );
+
+                                                                                    res.status(
+                                                                                        500
+                                                                                    ).json({
+                                                                                        message:
+                                                                                            "Không thể lưu thay đổi"
+                                                                                    });
+                                                                                }
+                                                                            );
+                                                                        }
+
+                                                                        // -------------------------------------------------
+                                                                        // 20. Thành công
+                                                                        // -------------------------------------------------
+
+                                                                        res.json({
+                                                                            message:
+                                                                                "Đã cập nhật phiếu bảo trì thành công",
+                                                                            serviceId:
+                                                                                Number(
+                                                                                    serviceId
+                                                                                ),
+                                                                            round:
+                                                                                maintenanceRound,
+                                                                            total:
+                                                                                results.length
+                                                                        });
+                                                                    }
+                                                                );
+                                                            }
+                                                        );
+                                                    }
+                                                );
+                                            }
+                                        );
+                                    }
+                                );
+                            }
+                        );
+                    }
+                );
+            }
+        );
+    }
+);
 app.get("/elevators/:elevatorId/services", authenticateToken, (req, res) => {
     const { elevatorId } = req.params;
 

@@ -15,6 +15,8 @@ import ElevatorInfo from '../screens/ElevatorInfo';
 import TechnicalInfo from '../screens/TechnicalInfo';
 import Inspections from '../screens/Inspections';
 import ServiceHistory from '../screens/ServiceHistory';
+import ServiceDetail from '../screens/ServiceDetail';
+import ServiceEdit from '../screens/ServiceEdit';
 
 // Admin
 import AdminHome from '../screens/AdminHome';
@@ -46,6 +48,14 @@ export type RootStackParamList = {
   TechnicalInfo: {elevatorId?: string} | undefined;
   Inspections: {elevatorId?: string} | undefined;
   ServiceHistory: {elevatorId?: string} | undefined;
+  ServiceDetail: {
+  elevatorId: string;
+  serviceId: number;
+  };
+  ServiceEdit: {
+  elevatorId: string;
+  serviceId: number;
+  };
 
   // Admin
   AdminHome: undefined;
@@ -119,7 +129,14 @@ const AppNavigator = () => {
           name="ServiceHistory"
           component={ServiceHistory}
         />
-
+        <Stack.Screen
+          name="ServiceDetail"
+          component={ServiceDetail}
+        />
+        <Stack.Screen
+         name="ServiceEdit"
+         component={ServiceEdit}
+        />
         {/* Admin */}
         <Stack.Screen
           name="AdminHome"

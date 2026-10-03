@@ -11,7 +11,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 });
 
-
 // Tạo bảng users
 db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -67,4 +66,32 @@ db.run(`
         description TEXT
     )
 `);
+
+// =====================================================
+// BẢNG MASTER CHECKLIST BẢO TRÌ
+// =====================================================
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS maintenance_checklists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL UNIQUE,
+        round INTEGER NOT NULL,
+        section TEXT NOT NULL,
+        content TEXT NOT NULL
+    )
+`);
+
+// =====================================================
+// BẢNG KẾT QUẢ CHECKLIST CỦA TỪNG LẦN BẢO TRÌ
+// =====================================================
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS maintenance_checklist_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        serviceId INTEGER NOT NULL,
+        checklistId INTEGER NOT NULL,
+        result TEXT NOT NULL
+    )
+`);
+
 module.exports = db;

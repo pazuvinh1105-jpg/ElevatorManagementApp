@@ -52,7 +52,7 @@ const LoginScreen = ({navigation}: Props) => {
     }
 
     await AsyncStorage.setItem('token', data.token);
-
+    await AsyncStorage.setItem('role', data.user.role);
    Alert.alert(
   'Đăng nhập thành công',
   `Xin chào ${data.user.username}`,
