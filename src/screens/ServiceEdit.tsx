@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DatePickerField from '../components/DatePickerField';
 
 const ServiceEdit = ({route, navigation}: any) => {
   const {elevatorId, serviceId} = route.params;
@@ -249,6 +250,7 @@ const ServiceEdit = ({route, navigation}: any) => {
       <SafeAreaView style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}>
 
           <View style={styles.header}>
@@ -286,11 +288,10 @@ const ServiceEdit = ({route, navigation}: any) => {
                 Ngày thực hiện
               </Text>
 
-              <TextInput
+              <DatePickerField
                 value={date}
                 onChangeText={setDate}
                 style={styles.input}
-                placeholder="Nhập ngày bảo trì"
                 placeholderTextColor="#8A9BB0"
               />
             </View>

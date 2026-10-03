@@ -12,6 +12,8 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DatePickerField from '../components/DatePickerField';
+import {sortRecordsByDate} from '../utils/sortRecordsByDate';
 
 const ServiceHistory = ({route, navigation}: any) => {
   const selectedElevatorId = route.params?.elevatorId;
@@ -112,7 +114,7 @@ const ServiceHistory = ({route, navigation}: any) => {
           return;
         }
 
-        setServices(serviceData);
+        setServices(sortRecordsByDate(serviceData, (item: any) => item.date));
       } catch (error) {
         console.error(
           'Lỗi lấy lịch sử dịch vụ:',
@@ -327,7 +329,7 @@ const ServiceHistory = ({route, navigation}: any) => {
         await refreshResponse.json();
 
       if (refreshResponse.ok) {
-        setServices(refreshData);
+        setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
       }
     } catch (error) {
       console.error(
@@ -418,7 +420,7 @@ const ServiceHistory = ({route, navigation}: any) => {
       await refreshResponse.json();
 
     if (refreshResponse.ok) {
-      setServices(refreshData);
+      setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
     }
   } catch (error) {
     console.error(
@@ -443,6 +445,7 @@ const ServiceHistory = ({route, navigation}: any) => {
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}>
 
         {/* ================= HEADER ================= */}
@@ -739,9 +742,8 @@ const ServiceHistory = ({route, navigation}: any) => {
               Ngày thực hiện
             </Text>
 
-            <TextInput
+            <DatePickerField
               style={styles.input}
-              placeholder="Ví dụ: 2026-09-27"
               value={serviceDate}
               onChangeText={setServiceDate}
             />

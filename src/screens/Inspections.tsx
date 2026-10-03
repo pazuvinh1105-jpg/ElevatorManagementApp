@@ -12,6 +12,8 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DatePickerField from '../components/DatePickerField';
+import {sortRecordsByDate} from '../utils/sortRecordsByDate';
 
 const Inspections = ({route}: any) => {
   const selectedElevatorId = route.params?.elevatorId;
@@ -101,7 +103,7 @@ const Inspections = ({route}: any) => {
           return;
         }
 
-        setInspections(inspectionData);
+        setInspections(sortRecordsByDate(inspectionData, (item: any) => item.inspectionDate));
       } catch (error) {
         console.error(
           'Lỗi lấy dữ liệu kiểm định:',
@@ -206,7 +208,7 @@ const Inspections = ({route}: any) => {
       const refreshData = await refreshResponse.json();
 
       if (refreshResponse.ok) {
-        setInspections(refreshData);
+        setInspections(sortRecordsByDate(refreshData, (item: any) => item.inspectionDate));
       }
     } catch (error) {
       console.error(
@@ -231,6 +233,7 @@ const Inspections = ({route}: any) => {
       <SafeAreaView style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}>
           {/* ================= HEADER ================= */}
 
@@ -274,9 +277,8 @@ const Inspections = ({route}: any) => {
                 Ngày kiểm định
               </Text>
 
-              <TextInput
+              <DatePickerField
                 style={styles.input}
-                placeholder="Ví dụ: 2026-09-27"
                 value={inspectionDate}
                 onChangeText={setInspectionDate}
               />

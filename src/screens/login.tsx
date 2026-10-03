@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useAuth} from '../navigation/AuthContext';
 import styles from '../styles/loginStyle';
 import {
   Alert,
@@ -17,7 +17,8 @@ import {RootStackParamList} from '../navigation/AppNavigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
-const LoginScreen = ({navigation}: Props) => {
+const LoginScreen = ({}: Props) => {
+  const {signIn} = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -51,26 +52,7 @@ const LoginScreen = ({navigation}: Props) => {
       return;
     }
 
-    await AsyncStorage.setItem('token', data.token);
-    await AsyncStorage.setItem('role', data.user.role);
-   Alert.alert(
-  'Đăng nhập thành công',
-  `Xin chào ${data.user.username}`,
-   [
-    {
-      text: 'OK',
-      onPress: () => {
-        if (data.user.role === 'admin') {
-           navigation.navigate('AdminHome');
-        } else if (data.user.role === 'technician') {
-           navigation.navigate('ElevatorSearch');
-        } else if (data.user.role === 'owner') {
-           navigation.navigate('OwnerHome');
-        }
-      },
-    },
-      ],
-  );
+    await signIn(data.token, data.user.role);
   } catch (error) {
     console.error(error);
     Alert.alert(

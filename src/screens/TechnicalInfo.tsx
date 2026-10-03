@@ -196,7 +196,7 @@ const TechnicalInfo = ({route}: any) => {
                 </Text>
 
                 <Text style={styles.value}>
-                  {elevator.pitDepth} mm
+                  {elevator.pitDepth} cm
                 </Text>
               </View>
 
@@ -210,7 +210,7 @@ const TechnicalInfo = ({route}: any) => {
                 </Text>
 
                 <Text style={styles.value}>
-                  {elevator.overheadHeight} mm
+                  {elevator.overheadHeight} cm
                 </Text>
               </View>
 

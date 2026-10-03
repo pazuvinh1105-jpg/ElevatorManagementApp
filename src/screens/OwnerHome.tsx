@@ -11,6 +11,7 @@ import {
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigation';
+import LogoutButton from '../navigation/LogoutButton';
 
 const OwnerHome = () => {
   const navigation =
@@ -26,6 +27,7 @@ const OwnerHome = () => {
           <ScrollView
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
+            <LogoutButton />
 
             {/* ================= HEADER ================= */}
 

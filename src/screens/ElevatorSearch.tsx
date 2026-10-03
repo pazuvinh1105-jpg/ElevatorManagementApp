@@ -3,6 +3,7 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import LogoutButton from '../navigation/LogoutButton';
 import {
   ActivityIndicator,
   Alert,
@@ -108,6 +109,7 @@ const ElevatorSearch = () => {
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
           >
+            <LogoutButton />
 
             {/* Header */}
             <View style={styles.header}>

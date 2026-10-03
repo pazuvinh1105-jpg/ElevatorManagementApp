@@ -9,6 +9,7 @@ import {
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigation';
 import styles from '../admin/styles';
+import LogoutButton from '../navigation/LogoutButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminHome'>;
 
@@ -62,6 +63,7 @@ const AdminHome = ({navigation}: Props) => {
             },
           ]}
           showsVerticalScrollIndicator={false}>
+          <LogoutButton />
 
           {/* Header */}
           <View

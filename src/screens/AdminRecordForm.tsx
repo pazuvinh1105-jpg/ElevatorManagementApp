@@ -4,6 +4,7 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigation';
 import {adminRequest} from '../admin/api';
 import styles from '../admin/styles';
+import DatePickerField from '../components/DatePickerField';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminRecordForm'>;
 const serviceTypes = ['maintenance', 'repair', 'replacement', 'inspection'] as const;
@@ -65,7 +66,7 @@ const AdminRecordForm = ({navigation, route}: Props) => {
       <Text style={styles.subtitle}>Thang máy {elevatorId}</Text>
       {loading ? <ActivityIndicator color="#135FC4" /> : <>
       <Text style={styles.label}>Ngày (YYYY-MM-DD)</Text>
-      <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-09-27" />
+      <DatePickerField style={styles.input} value={date} onChangeText={setDate} />
       {kind === 'inspection' ? <>
         <Text style={styles.label}>Đơn vị kiểm định</Text>
         <TextInput style={styles.input} value={inspectionUnit} onChangeText={setInspectionUnit} />

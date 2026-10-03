@@ -21,7 +21,7 @@ const HomeScreen = () => {
 
         // Gọi API lấy thông tin thang máy
         const response = await fetch(
-          'http://192.168.0.104:3000/elevators',
+          'http://127.0.0.1:3000/elevators',
           {
             method: 'GET',
             headers: {
@@ -135,11 +135,11 @@ const HomeScreen = () => {
      </Text>
 
      <Text style={{fontSize: 16, marginTop: 10}}>
-     Độ sâu hố pit: {elevator ? elevator.pitDepth : 'Đang tải...'} mm
+       Độ sâu hố pit: {elevator ? elevator.pitDepth : 'Đang tải...'} cm
      </Text>
 
      <Text style={{fontSize: 16, marginTop: 10}}>
-     Chiều cao overhead: {elevator ? elevator.overheadHeight : 'Đang tải...'} mm
+       Chiều cao overhead: {elevator ? elevator.overheadHeight : 'Đang tải...'} cm
      </Text>
 
      <Text style={{fontSize: 16, marginTop: 10}}>

@@ -1,6 +1,7 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {AuthProvider, useAuth} from './AuthContext';
 
 import LoginScreen from '../screens/login';
 import RegisterScreen from '../screens/register';
@@ -81,28 +82,28 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
+  const {role, ready} = useAuth();
+  if (!ready) return null;
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Login"
+        key={role || 'guest'}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
         }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-
-        <Stack.Screen name="Register" component={RegisterScreen} />
-
+        {!role ? <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+        </> : <>
+        {role === 'admin' && <Stack.Screen name="AdminHome" component={AdminHome} />}
+        {role === 'technician' && <Stack.Screen name="ElevatorSearch" component={ElevatorSearch} />}
+        {role === 'owner' && <Stack.Screen name="OwnerHome" component={OwnerHome} />}
         <Stack.Screen name="Home" component={HomeScreen} />
 
         {/* Owner */}
-        <Stack.Screen name="OwnerHome" component={OwnerHome} />
 
         {/* Technician */}
-        <Stack.Screen
-          name="ElevatorSearch"
-          component={ElevatorSearch}
-        />
 
         <Stack.Screen
           name="TechnicianElevatorMenu"
@@ -138,10 +139,6 @@ const AppNavigator = () => {
          component={ServiceEdit}
         />
         {/* Admin */}
-        <Stack.Screen
-          name="AdminHome"
-          component={AdminHome}
-        />
 
         <Stack.Screen
           name="AdminElevators"
@@ -172,9 +169,12 @@ const AppNavigator = () => {
           name="AdminRecordForm"
           component={AdminRecordForm}
         />
+        </>}
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
 
-export default AppNavigator;
+export default function AppNavigation() {
+  return <AuthProvider><AppNavigator /></AuthProvider>;
+}
