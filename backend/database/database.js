@@ -94,4 +94,16 @@ db.run(`
     )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recordType TEXT NOT NULL,
+    recordId INTEGER NOT NULL,
+    fileName TEXT NOT NULL,
+    fileUri TEXT NOT NULL,
+    fileType TEXT NOT NULL,
+    fileSize INTEGER,
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
 module.exports = db;

@@ -18,25 +18,55 @@ const ServiceDetail = ({route, navigation}: any) => {
   const [service, setService] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<any[]>([]);
 
-  useEffect(() => {
-    const getServiceDetail = async () => {
+ useEffect(() => {
+  const getServiceDetail = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userRole = await AsyncStorage.getItem('role');
+
+      if (!token) {
+        Alert.alert(
+          'Lỗi',
+          'Không tìm thấy thông tin đăng nhập.',
+        );
+        return;
+      }
+
+      setRole(userRole);
+
+      // ==============================
+      // 1. Lấy thông tin chi tiết phiếu
+      // ==============================
+      const response = await fetch(
+        `http://127.0.0.1:3000/elevators/${elevatorId}/maintenance/${serviceId}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert(
+          'Lỗi',
+          data.message || 'Không thể lấy chi tiết phiếu.',
+        );
+        return;
+      }
+
+      setService(data);
+
+      // ==============================
+      // 2. Lấy file đính kèm của phiếu
+      // ==============================
       try {
-        const token = await AsyncStorage.getItem('token');
-        const userRole = await AsyncStorage.getItem('role');
-
-        if (!token) {
-          Alert.alert(
-            'Lỗi',
-            'Không tìm thấy thông tin đăng nhập.',
-          );
-          return;
-        }
-
-        setRole(userRole);
-
-        const response = await fetch(
-          `http://127.0.0.1:3000/elevators/${elevatorId}/maintenance/${serviceId}`,
+        const attachmentResponse = await fetch(
+          `http://127.0.0.1:3000/attachments?recordType=maintenance&recordId=${serviceId}`,
           {
             method: 'GET',
             headers: {
@@ -45,34 +75,48 @@ const ServiceDetail = ({route, navigation}: any) => {
           },
         );
 
-        const data = await response.json();
+        const attachmentData =
+          await attachmentResponse.json();
 
-        if (!response.ok) {
-          Alert.alert(
-            'Lỗi',
-            data.message || 'Không thể lấy chi tiết phiếu.',
+        if (attachmentResponse.ok) {
+          setAttachments(
+            Array.isArray(attachmentData)
+              ? attachmentData
+              : [],
           );
-          return;
+        } else {
+          console.error(
+            'Lỗi lấy attachments:',
+            attachmentData,
+          );
+
+          setAttachments([]);
         }
-
-        setService(data);
-      } catch (error) {
+      } catch (attachmentError) {
         console.error(
-          'Lỗi lấy chi tiết phiếu:',
-          error,
+          'Lỗi kết nối khi lấy attachments:',
+          attachmentError,
         );
 
-        Alert.alert(
-          'Lỗi kết nối',
-          'Không thể kết nối tới Backend.',
-        );
-      } finally {
-        setLoading(false);
+        setAttachments([]);
       }
-    };
+    } catch (error) {
+      console.error(
+        'Lỗi lấy chi tiết phiếu:',
+        error,
+      );
 
-    getServiceDetail();
-  }, [elevatorId, serviceId]);
+      Alert.alert(
+        'Lỗi kết nối',
+        'Không thể kết nối tới Backend.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  getServiceDetail();
+}, [elevatorId, serviceId]);
 
   if (loading) {
     return (
@@ -117,165 +161,266 @@ const ServiceDetail = ({route, navigation}: any) => {
     );
   }
 
-  return (
-    <ImageBackground
-      source={require('../../assets/background.jpg')}
-      style={styles.background}
-      resizeMode="cover">
-      <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}>
+return (
+  <ImageBackground
+    source={require('../../assets/background.jpg')}
+    style={styles.background}
+    resizeMode="cover">
 
-          <View style={styles.header}>
-            <Text style={styles.title}>
-              Chi tiết phiếu
+    <SafeAreaView style={styles.container}>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+
+        {/* ==============================
+            HEADER
+        ============================== */}
+        <View style={styles.header}>
+          <Text style={styles.title}>
+            Chi tiết phiếu
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Thông tin chi tiết bảo trì
+          </Text>
+
+          <Text style={styles.elevatorId}>
+            Mã thang máy: {elevatorId}
+          </Text>
+
+          {(role === 'technician' || role === 'admin') && (
+            <TouchableOpacity
+              style={styles.editButton}
+              activeOpacity={0.85}
+              onPress={() => {
+                navigation.navigate('ServiceEdit', {
+                  elevatorId,
+                  serviceId,
+                });
+              }}>
+
+              <Text style={styles.editButtonText}>
+                ✎  Chỉnh sửa phiếu
+              </Text>
+
+            </TouchableOpacity>
+          )}
+        </View>
+
+
+        {/* ==============================
+            THÔNG TIN PHIẾU
+        ============================== */}
+        <View style={styles.card}>
+
+          <Text style={styles.sectionTitle}>
+            Thông tin phiếu
+          </Text>
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.label}>
+              Mã phiếu
             </Text>
 
-            <Text style={styles.subtitle}>
-              Thông tin chi tiết bảo trì
+            <Text style={styles.value}>
+              {service.service?.id || service.id}
             </Text>
-
-            <Text style={styles.elevatorId}>
-              Mã thang máy: {elevatorId}
-            </Text>
-
-            {(role === 'technician' || role === 'admin') && (
-              <TouchableOpacity
-                style={styles.editButton}
-                activeOpacity={0.85}
-                onPress={() => {
-                  navigation.navigate('ServiceEdit', {
-                    elevatorId,
-                    serviceId,
-                  });
-                }}>
-                <Text style={styles.editButtonText}>
-                  ✎  Chỉnh sửa phiếu
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              Thông tin phiếu
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.label}>
+              Loại dịch vụ
             </Text>
 
-            <View style={styles.infoBlock}>
-              <Text style={styles.label}>
-                Mã phiếu
-              </Text>
-
-              <Text style={styles.value}>
-                {service.service?.id || service.id}
-              </Text>
-            </View>
-
-            <View style={styles.infoBlock}>
-              <Text style={styles.label}>
-                Loại dịch vụ
-              </Text>
-
-              <Text style={styles.value}>
-                Bảo trì
-              </Text>
-            </View>
-
-            <View style={styles.infoBlock}>
-              <Text style={styles.label}>
-                Ngày thực hiện
-              </Text>
-
-              <Text style={styles.value}>
-                {service.service?.date || service.date}
-              </Text>
-            </View>
-
-            <View style={styles.infoBlock}>
-              <Text style={styles.label}>
-                Kỹ thuật viên
-              </Text>
-
-              <Text style={styles.value}>
-                {service.service?.technicianId ||
-                  service.technicianId ||
-                  'Chưa cập nhật'}
-              </Text>
-            </View>
-
-            <View style={styles.infoBlock}>
-              <Text style={styles.label}>
-                Nội dung dịch vụ
-              </Text>
-
-              <Text style={styles.description}>
-                {service.service?.description ||
-                  service.description ||
-                  'Không có mô tả'}
-              </Text>
-            </View>
+            <Text style={styles.value}>
+              Bảo trì
+            </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              Checklist bảo trì
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.label}>
+              Ngày thực hiện
             </Text>
 
-            {service.results?.length > 0 ? (
-              service.results.map(
-                (item: any, index: number) => (
+            <Text style={styles.value}>
+              {service.service?.date || service.date}
+            </Text>
+          </View>
+
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.label}>
+              Kỹ thuật viên
+            </Text>
+
+            <Text style={styles.value}>
+              {service.service?.technicianId ||
+                service.technicianId ||
+                'Chưa cập nhật'}
+            </Text>
+          </View>
+
+
+          <View style={styles.infoBlock}>
+            <Text style={styles.label}>
+              Nội dung dịch vụ
+            </Text>
+
+            <Text style={styles.description}>
+              {service.service?.description ||
+                service.description ||
+                'Không có mô tả'}
+            </Text>
+          </View>
+
+        </View>
+
+
+        {/* ==============================
+            CHECKLIST BẢO TRÌ
+        ============================== */}
+        <View style={styles.card}>
+
+          <Text style={styles.sectionTitle}>
+            Checklist bảo trì
+          </Text>
+
+          {service.results?.length > 0 ? (
+
+            service.results.map(
+              (item: any, index: number) => (
+
+                <View
+                  key={
+                    item.id ||
+                    item.checklistId ||
+                    index
+                  }
+                  style={styles.checklistItem}>
+
+                  <Text style={styles.checklistCode}>
+                    {item.code ||
+                      item.checklistCode ||
+                      `Mục ${index + 1}`}
+                  </Text>
+
+
+                  <Text style={styles.checklistContent}>
+                    {item.content ||
+                      item.checklistContent ||
+                      'Không có nội dung'}
+                  </Text>
+
+
                   <View
-                    key={
-                      item.id ||
-                      item.checklistId ||
-                      index
-                    }
-                    style={styles.checklistItem}>
+                    style={[
+                      styles.resultBox,
+                      item.result === 'pass'
+                        ? styles.passBox
+                        : styles.failBox,
+                    ]}>
 
-                    <Text style={styles.checklistCode}>
-                      {item.code ||
-                        item.checklistCode ||
-                        `Mục ${index + 1}`}
+                    <Text style={styles.resultText}>
+                      {item.result === 'pass'
+                        ? '✓ Đạt'
+                        : '✕ Không đạt'}
                     </Text>
 
-                    <Text style={styles.checklistContent}>
-                      {item.content ||
-                        item.checklistContent ||
-                        'Không có nội dung'}
-                    </Text>
-
-                    <View
-                      style={[
-                        styles.resultBox,
-                        item.result === 'pass'
-                          ? styles.passBox
-                          : styles.failBox,
-                      ]}>
-
-                      <Text style={styles.resultText}>
-                        {item.result === 'pass'
-                          ? '✓ Đạt'
-                          : '✕ Không đạt'}
-                      </Text>
-
-                    </View>
                   </View>
-                ),
-              )
-            ) : (
-              <Text style={styles.emptyText}>
-                Không có dữ liệu checklist.
-              </Text>
-            )}
-          </View>
 
-        </ScrollView>
-      </SafeAreaView>
-    </ImageBackground>
-  );
+                </View>
+              ),
+            )
+
+          ) : (
+
+            <Text style={styles.emptyText}>
+              Không có dữ liệu checklist.
+            </Text>
+
+          )}
+
+        </View>
+
+
+        {/* ==============================
+            FILE ĐÍNH KÈM
+        ============================== */}
+        <View style={styles.card}>
+
+          <Text style={styles.sectionTitle}>
+            📎 File đính kèm
+          </Text>
+
+
+          {attachments.length > 0 ? (
+
+            attachments.map(
+              (file: any, index: number) => (
+
+                <View
+                  key={file.id || index}
+                  style={styles.attachmentItem}>
+
+                  {/* ICON FILE */}
+                  <Text style={styles.attachmentIcon}>
+                    {file.fileType === 'image'
+                      ? '🖼️'
+                      : file.fileType === 'video'
+                      ? '🎥'
+                      : '📄'}
+                  </Text>
+
+
+                  {/* THÔNG TIN FILE */}
+                  <View style={styles.attachmentInfo}>
+
+                    <Text
+                      style={styles.attachmentName}
+                      numberOfLines={2}>
+                      {file.fileName ||
+                        'File đính kèm'}
+                    </Text>
+
+
+                    <Text style={styles.attachmentMeta}>
+
+                      {String(
+                        file.fileType || '',
+                      ).toUpperCase()}
+
+                      {file.fileSize
+                        ? ` · ${(file.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                        : ''}
+
+                    </Text>
+
+                  </View>
+
+                </View>
+              ),
+            )
+
+          ) : (
+
+            <Text style={styles.emptyText}>
+              Chưa có file đính kèm.
+            </Text>
+
+          )}
+
+        </View>
+
+      </ScrollView>
+
+    </SafeAreaView>
+
+  </ImageBackground>
+);
 };
-
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -391,7 +536,37 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#123B78',
   },
+  attachmentItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F5F9FF',
+  borderWidth: 1,
+  borderColor: 'rgba(80,160,230,0.20)',
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 10,
+},
 
+attachmentIcon: {
+  fontSize: 25,
+  marginRight: 12,
+},
+
+attachmentInfo: {
+  flex: 1,
+},
+
+attachmentName: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#123B78',
+},
+
+attachmentMeta: {
+  fontSize: 12,
+  color: '#607A9B',
+  marginTop: 5,
+},
   resultBox: {
     marginTop: 10,
     borderRadius: 10,

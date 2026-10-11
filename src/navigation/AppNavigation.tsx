@@ -15,9 +15,12 @@ import TechnicianElevatorMenu from '../screens/TechnicianElevatorMenu';
 import ElevatorInfo from '../screens/ElevatorInfo';
 import TechnicalInfo from '../screens/TechnicalInfo';
 import Inspections from '../screens/Inspections';
+import InspectionDetail from '../screens/InspectionDetail';
 import ServiceHistory from '../screens/ServiceHistory';
 import ServiceDetail from '../screens/ServiceDetail';
 import ServiceEdit from '../screens/ServiceEdit';
+import RepairDetail from '../screens/RepairDetail';
+import ReplacementDetail from '../screens/ReplacementDetail';
 
 // Admin
 import AdminHome from '../screens/AdminHome';
@@ -48,7 +51,11 @@ export type RootStackParamList = {
   ElevatorInfo: {elevatorId?: string} | undefined;
   TechnicalInfo: {elevatorId?: string} | undefined;
   Inspections: {elevatorId?: string} | undefined;
-  ServiceHistory: {elevatorId?: string} | undefined;
+  InspectionDetail: {
+  elevatorId: string;
+  inspectionId: number;
+};
+ServiceHistory: {elevatorId?: string} | undefined;
   ServiceDetail: {
   elevatorId: string;
   serviceId: number;
@@ -57,6 +64,15 @@ export type RootStackParamList = {
   elevatorId: string;
   serviceId: number;
   };
+  RepairDetail: {
+  elevatorId: string;
+  serviceId: number;
+};
+
+ReplacementDetail: {
+  elevatorId: string;
+  serviceId: number;
+};
 
   // Admin
   AdminHome: undefined;
@@ -125,7 +141,13 @@ const AppNavigator = () => {
           name="Inspections"
           component={Inspections}
         />
-
+        <Stack.Screen
+          name="InspectionDetail"
+          component={InspectionDetail}
+          options={{
+           title: 'Chi tiết kiểm định',
+        }}
+        />
         <Stack.Screen
           name="ServiceHistory"
           component={ServiceHistory}
@@ -137,6 +159,15 @@ const AppNavigator = () => {
         <Stack.Screen
          name="ServiceEdit"
          component={ServiceEdit}
+        />
+        <Stack.Screen
+         name="RepairDetail"
+         component={RepairDetail}
+        />
+
+        <Stack.Screen
+         name="ReplacementDetail"
+         component={ReplacementDetail}
         />
         {/* Admin */}
 

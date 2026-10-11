@@ -915,7 +915,57 @@ app.get(
 // Technician + Admin được phép sửa
 // Owner không được phép sửa
 // =====================================================
+// =====================================================
+// LẤY CHI TIẾT MỘT DỊCH VỤ
+// Repair / Replacement
+// =====================================================
 
+app.get(
+    "/elevators/:elevatorId/services/:serviceId",
+    authenticateToken,
+    (req, res) => {
+        const {elevatorId, serviceId} = req.params;
+
+        db.get(
+            `
+            SELECT
+                id,
+                elevatorId,
+                technicianId,
+                type,
+                date,
+                description
+            FROM service_history
+            WHERE id = ?
+              AND elevatorId = ?
+              AND type IN ('repair', 'replacement')
+            `,
+            [serviceId, elevatorId],
+            (err, service) => {
+                if (err) {
+                    console.error(
+                        "Lỗi lấy chi tiết dịch vụ:",
+                        err.message
+                    );
+
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!service) {
+                    return res.status(404).json({
+                        message: "Không tìm thấy bản ghi sửa chữa/thay thế"
+                    });
+                }
+
+                res.json({
+                    service
+                });
+            }
+        );
+    }
+);
 // =====================================================
 // CẬP NHẬT MỘT PHIẾU BẢO TRÌ
 // Technician + Admin được phép sửa
@@ -1474,6 +1524,180 @@ app.post("/elevators/:elevatorId/services", authenticateToken, (req, res) => {
             res.status(201).json({
                 message: "Đã thêm lịch sử dịch vụ",
                 id: this.lastID
+            });
+        }
+    );
+});
+// =====================================================
+// ATTACHMENTS API
+// =====================================================
+
+ app.post("/attachments", authenticateToken, (req, res) => {
+    // Chỉ Admin và Technician được thêm attachment
+    if (!["admin", "technician"].includes(req.user.role)) {
+        return res.status(403).json({
+            message: "Chỉ Admin hoặc Technician được thêm file"
+        });
+    }
+
+    const {
+        recordType,
+        recordId,
+        fileName,
+        fileUri,
+        fileType,
+        fileSize
+    } = req.body;
+
+    if (
+        !recordType ||
+        !recordId ||
+        !fileName ||
+        !fileUri ||
+        !fileType
+    ) {
+        return res.status(400).json({
+            message: "Thiếu thông tin attachment"
+        });
+    }
+
+    if (
+        !["inspection", "maintenance", "repair", "replacement"]
+            .includes(recordType)
+    ) {
+        return res.status(400).json({
+            message: "Loại bản ghi không hợp lệ"
+        });
+    }
+
+    db.run(
+        `
+        INSERT INTO attachments
+        (
+            recordType,
+            recordId,
+            fileName,
+            fileUri,
+            fileType,
+            fileSize
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+            recordType,
+            recordId,
+            fileName,
+            fileUri,
+            fileType,
+            fileSize || null
+        ],
+        function (err) {
+            if (err) {
+                console.error(
+                    "Lỗi lưu attachment:",
+                    err.message
+                );
+
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            res.status(201).json({
+                message: "Đã lưu attachment",
+                id: this.lastID
+            });
+        }
+    );
+});
+// GET attachments của một bản ghi
+// Admin, Technician, Owner đều được xem
+app.get("/attachments", authenticateToken, (req, res) => {
+  const {recordType, recordId} = req.query;
+
+  if (!recordType || !recordId) {
+    return res.status(400).json({
+      message: "Thiếu recordType hoặc recordId",
+    });
+  }
+
+  if (
+    !["inspection", "maintenance", "repair", "replacement"].includes(
+      recordType
+    )
+  ) {
+    return res.status(400).json({
+      message: "Loại bản ghi không hợp lệ",
+    });
+  }
+
+  db.all(
+    `
+      SELECT
+        id,
+        recordType,
+        recordId,
+        fileName,
+        fileUri,
+        fileType,
+        fileSize,
+        createdAt
+      FROM attachments
+      WHERE recordType = ?
+        AND recordId = ?
+      ORDER BY id DESC
+    `,
+    [recordType, recordId],
+    (err, rows) => {
+      if (err) {
+        console.error("Lỗi lấy attachments:", err);
+
+        return res.status(500).json({
+          message: "Lỗi database",
+        });
+      }
+
+      res.json(rows);
+    }
+  );
+});
+// =====================================================
+// DELETE ATTACHMENT
+// =====================================================
+app.delete("/attachments/:id", authenticateToken, (req, res) => {
+    // Chỉ Admin và Technician được xóa attachment
+    if (!["admin", "technician"].includes(req.user.role)) {
+        return res.status(403).json({
+            message: "Chỉ Admin hoặc Technician được xóa file"
+        });
+    }
+
+    const {id} = req.params;
+
+    db.run(
+        `DELETE FROM attachments WHERE id = ?`,
+        [id],
+        function (err) {
+            if (err) {
+                console.error(
+                    "Lỗi xóa attachment:",
+                    err.message
+                );
+
+                return res.status(500).json({
+                    message: "Lỗi database"
+                });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({
+                    message: "Không tìm thấy file cần xóa"
+                });
+            }
+
+            res.json({
+                message: "Đã xóa attachment",
+                id: Number(id)
             });
         }
     );

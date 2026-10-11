@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {pick, types} from '@react-native-documents/picker';
 import DatePickerField from '../components/DatePickerField';
 import {sortRecordsByDate} from '../utils/sortRecordsByDate';
 
@@ -38,6 +39,7 @@ const ServiceHistory = ({route, navigation}: any) => {
   }>({});
   const [serviceDate, setServiceDate] = useState('');
   const [description, setDescription] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -139,9 +141,6 @@ const ServiceHistory = ({route, navigation}: any) => {
       case 'maintenance':
         return 'Bảo trì';
 
-      case 'inspection':
-        return 'Kiểm định';
-
       case 'repair':
         return 'Sửa chữa';
 
@@ -204,6 +203,18 @@ const ServiceHistory = ({route, navigation}: any) => {
     setLoadingChecklists(false);
   }
 };
+const handlePickFiles = async () => {
+  try {
+    const result = await pick({
+      allowMultiSelection: true,
+      type: [types.images, types.video, types.allFiles],
+    });
+
+    setSelectedFiles(result);
+  } catch (error) {
+    console.log('Chọn file bị hủy hoặc lỗi:', error);
+  }
+};
   const handleAddService = async () => {
   if (!serviceDate.trim() || !description.trim()) {
     Alert.alert(
@@ -220,137 +231,36 @@ const ServiceHistory = ({route, navigation}: any) => {
     );
     return;
   }
-
+  
   // ==========================================
-  // BẢO TRÌ
-  // ==========================================
-  if (serviceType === 'maintenance') {
-    if (maintenanceRound === null) {
-      Alert.alert(
-        'Thiếu thông tin',
-        'Vui lòng chọn lần bảo trì.',
-      );
-      return;
-    }
-
-    const totalChecklist =
-      maintenanceChecklists.length;
-
-    const completedChecklist =
-      Object.keys(checklistResults).length;
-
-    if (
-      totalChecklist === 0 ||
-      completedChecklist !== totalChecklist
-    ) {
-      Alert.alert(
-        'Chưa hoàn thành checklist',
-        `Vui lòng đánh giá đầy đủ tất cả ${totalChecklist} mục checklist.\n\nĐã đánh giá: ${completedChecklist}/${totalChecklist} mục.`,
-      );
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const token =
-        await AsyncStorage.getItem('token');
-
-      if (!token) {
-        Alert.alert(
-          'Lỗi',
-          'Không tìm thấy thông tin đăng nhập.',
-        );
-        return;
-      }
-
-      // Chuyển checklistResults thành mảng
-      // mà Backend /maintenance yêu cầu
-      const results = maintenanceChecklists.map(
-        item => ({
-          checklistId: item.id,
-          result: checklistResults[item.id],
-        }),
-      );
-
-      const response = await fetch(
-        `http://127.0.0.1:3000/elevators/${elevatorId}/maintenance`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            round: maintenanceRound,
-            date: serviceDate.trim(),
-            description: description.trim(),
-            results,
-          }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert(
-          'Lỗi',
-          data.message ||
-            'Không thể tạo phiếu bảo trì.',
-        );
-        return;
-      }
-
-      Alert.alert(
-        'Thành công',
-        `Đã tạo phiếu bảo trì lần ${maintenanceRound}.\n\nĐã lưu ${data.total} checklist.`,
-      );
-
-      setServiceType('maintenance');
-      setMaintenanceRound(null);
-      setMaintenanceChecklists([]);
-      setChecklistResults({});
-      setServiceDate('');
-      setDescription('');
-      setShowAddForm(false);
-
-      // Tải lại lịch sử dịch vụ
-      const refreshResponse = await fetch(
-        `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const refreshData =
-        await refreshResponse.json();
-
-      if (refreshResponse.ok) {
-        setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
-      }
-    } catch (error) {
-      console.error(
-        'Lỗi tạo phiếu bảo trì:',
-        error,
-      );
-
-      Alert.alert(
-        'Lỗi kết nối',
-        'Không thể kết nối tới Backend.',
-      );
-    } finally {
-      setSaving(false);
-    }
-
+// BẢO TRÌ
+// ==========================================
+if (serviceType === 'maintenance') {
+  if (maintenanceRound === null) {
+    Alert.alert(
+      'Thiếu thông tin',
+      'Vui lòng chọn lần bảo trì.',
+    );
     return;
   }
 
-  // ==========================================
-  // CÁC DỊCH VỤ KHÁC
-  // ==========================================
+  const totalChecklist =
+    maintenanceChecklists.length;
+
+  const completedChecklist =
+    Object.keys(checklistResults).length;
+
+  if (
+    totalChecklist === 0 ||
+    completedChecklist !== totalChecklist
+  ) {
+    Alert.alert(
+      'Chưa hoàn thành checklist',
+      `Vui lòng đánh giá đầy đủ tất cả ${totalChecklist} mục checklist.\n\nĐã đánh giá: ${completedChecklist}/${totalChecklist} mục.`,
+    );
+    return;
+  }
+
   try {
     setSaving(true);
 
@@ -365,8 +275,20 @@ const ServiceHistory = ({route, navigation}: any) => {
       return;
     }
 
+    // Chuyển checklistResults thành mảng
+    // mà Backend /maintenance yêu cầu
+    const results = maintenanceChecklists.map(
+      item => ({
+        checklistId: item.id,
+        result: checklistResults[item.id],
+      }),
+    );
+
+    // ==========================================
+    // TẠO PHIẾU BẢO TRÌ
+    // ==========================================
     const response = await fetch(
-      `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
+      `http://127.0.0.1:3000/elevators/${elevatorId}/maintenance`,
       {
         method: 'POST',
         headers: {
@@ -374,9 +296,10 @@ const ServiceHistory = ({route, navigation}: any) => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          type: serviceType,
+          round: maintenanceRound,
           date: serviceDate.trim(),
           description: description.trim(),
+          results,
         }),
       },
     );
@@ -387,25 +310,89 @@ const ServiceHistory = ({route, navigation}: any) => {
       Alert.alert(
         'Lỗi',
         data.message ||
-          'Không thể thêm lịch sử dịch vụ.',
+          'Không thể tạo phiếu bảo trì.',
       );
       return;
     }
 
+    // ==========================================
+    // LƯU FILE ĐÍNH KÈM
+    // ==========================================
+    if (selectedFiles.length > 0) {
+      for (const file of selectedFiles) {
+        let fileType = 'document';
+
+        if (file.type?.startsWith('image/')) {
+          fileType = 'image';
+        } else if (file.type?.startsWith('video/')) {
+          fileType = 'video';
+        }
+
+        const attachmentResponse = await fetch(
+          'http://127.0.0.1:3000/attachments',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              recordType: 'maintenance',
+              recordId: data.serviceId,
+              fileName: file.name,
+              fileUri: file.uri,
+              fileType,
+              fileSize: file.size || null,
+            }),
+          },
+        );
+
+        const attachmentData =
+          await attachmentResponse.json();
+
+        if (!attachmentResponse.ok) {
+          console.error(
+            'Lỗi lưu attachment:',
+            attachmentData,
+          );
+
+          Alert.alert(
+            'Cảnh báo',
+            `Phiếu bảo trì đã được tạo nhưng không lưu được file "${file.name}".`,
+          );
+
+          return;
+        }
+      }
+    }
+
+    // ==========================================
+    // THÔNG BÁO THÀNH CÔNG
+    // ==========================================
     Alert.alert(
       'Thành công',
-      'Đã thêm bản ghi dịch vụ.',
+      `Đã tạo phiếu bảo trì lần ${maintenanceRound}.${
+        selectedFiles.length > 0
+          ? `\n\nĐã lưu ${selectedFiles.length} file đính kèm.`
+          : ''
+      }`,
     );
 
+    // ==========================================
+    // RESET FORM
+    // ==========================================
     setServiceType('maintenance');
     setMaintenanceRound(null);
     setMaintenanceChecklists([]);
     setChecklistResults({});
     setServiceDate('');
     setDescription('');
+    setSelectedFiles([]);
     setShowAddForm(false);
 
-    // Tải lại danh sách
+    // ==========================================
+    // TẢI LẠI LỊCH SỬ DỊCH VỤ
+    // ==========================================
     const refreshResponse = await fetch(
       `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
       {
@@ -420,11 +407,16 @@ const ServiceHistory = ({route, navigation}: any) => {
       await refreshResponse.json();
 
     if (refreshResponse.ok) {
-      setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
+      setServices(
+        sortRecordsByDate(
+          refreshData,
+          (item: any) => item.date,
+        ),
+      );
     }
   } catch (error) {
     console.error(
-      'Lỗi thêm lịch sử dịch vụ:',
+      'Lỗi tạo phiếu bảo trì:',
       error,
     );
 
@@ -435,8 +427,165 @@ const ServiceHistory = ({route, navigation}: any) => {
   } finally {
     setSaving(false);
   }
-};
 
+  return;
+}
+
+  // ==========================================
+  // CÁC DỊCH VỤ KHÁC
+  // ==========================================
+ try {
+  setSaving(true);
+
+  const token =
+    await AsyncStorage.getItem('token');
+
+  if (!token) {
+    Alert.alert(
+      'Lỗi',
+      'Không tìm thấy thông tin đăng nhập.',
+    );
+    return;
+  }
+
+  const response = await fetch(
+    `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        type: serviceType,
+        date: serviceDate.trim(),
+        description: description.trim(),
+      }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    Alert.alert(
+      'Lỗi',
+      data.message ||
+        'Không thể thêm lịch sử dịch vụ.',
+    );
+    return;
+  }
+
+  // ==========================================
+  // LƯU FILE ĐÍNH KÈM
+  // ==========================================
+  if (selectedFiles.length > 0) {
+    for (const file of selectedFiles) {
+      let fileType = 'document';
+
+      if (file.type?.startsWith('image/')) {
+        fileType = 'image';
+      } else if (file.type?.startsWith('video/')) {
+        fileType = 'video';
+      }
+
+      const attachmentResponse = await fetch(
+        'http://127.0.0.1:3000/attachments',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            recordType: serviceType,
+            recordId: data.serviceId,
+            fileName:
+              file.name || 'File đính kèm',
+            fileUri: file.uri,
+            fileType,
+            fileSize: file.size || null,
+          }),
+        },
+      );
+
+      const attachmentData =
+        await attachmentResponse.json();
+
+      if (!attachmentResponse.ok) {
+        console.error(
+          'Lỗi lưu attachment:',
+          attachmentData,
+        );
+
+        Alert.alert(
+          'Cảnh báo',
+          `Phiếu ${
+            serviceType === 'repair'
+              ? 'sửa chữa'
+              : 'thay thế'
+          } đã được tạo nhưng không lưu được file "${
+            file.name
+          }".`,
+        );
+
+        return;
+      }
+    }
+  }
+
+  Alert.alert(
+    'Thành công',
+    'Đã thêm bản ghi dịch vụ.',
+  );
+
+  setServiceType('maintenance');
+  setMaintenanceRound(null);
+  setMaintenanceChecklists([]);
+  setChecklistResults({});
+  setServiceDate('');
+  setDescription('');
+  setSelectedFiles([]);
+  setShowAddForm(false);
+
+  // Tải lại danh sách
+  const refreshResponse = await fetch(
+    `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const refreshData =
+    await refreshResponse.json();
+
+  if (refreshResponse.ok) {
+    setServices(
+      sortRecordsByDate(
+        refreshData.filter(
+          (item: any) =>
+            item.type !== 'inspection',
+        ),
+        (item: any) => item.date,
+      ),
+    );
+  }
+} catch (error) {
+  console.error(
+    'Lỗi thêm lịch sử dịch vụ:',
+    error,
+  );
+
+  Alert.alert(
+    'Lỗi kết nối',
+    'Không thể kết nối tới Backend.',
+  );
+} finally {
+  setSaving(false);
+}
+  };
  return (
   <ImageBackground
     source={require('../../assets/background.jpg')}
@@ -516,30 +665,6 @@ const ServiceHistory = ({route, navigation}: any) => {
                       styles.selectedTypeButtonText,
                   ]}>
                   Bảo trì
-                </Text>
-              </TouchableOpacity>
-
-              {/* KIỂM ĐỊNH */}
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  serviceType === 'inspection' &&
-                    styles.selectedTypeButton,
-                ]}
-                onPress={() => {
-                  setServiceType('inspection');
-                  setMaintenanceRound(null);
-                  setMaintenanceChecklists([]);
-                  setChecklistResults({});
-                }}>
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    serviceType === 'inspection' &&
-                      styles.selectedTypeButtonText,
-                  ]}>
-                  Kiểm định
                 </Text>
               </TouchableOpacity>
 
@@ -762,6 +887,14 @@ const ServiceHistory = ({route, navigation}: any) => {
               multiline
               textAlignVertical="top"
             />
+            <TouchableOpacity
+              style={styles.attachmentButton}
+              onPress={handlePickFiles}
+>
+            <Text style={styles.attachmentButtonText}>
+              📎 Thêm ảnh / video / file
+            </Text>
+            </TouchableOpacity>
 
             {/* ================= NÚT LƯU ================= */}
 
@@ -826,10 +959,23 @@ const ServiceHistory = ({route, navigation}: any) => {
                     Alert.alert('Lỗi', 'Không xác định được thang máy.');
                    return;
                   }
-                  navigation.navigate('ServiceDetail', {
-                    elevatorId,
-                    serviceId: service.id,
+                  if (service.type === 'maintenance') {
+                    navigation.navigate('ServiceDetail', {
+                     elevatorId,
+                     serviceId: service.id,
                    });
+                   } else if (service.type === 'repair') {
+                      navigation.navigate('RepairDetail', {
+                       elevatorId,
+                       serviceId: service.id,
+                   });
+                    } else if (service.type === 'replacement') {
+                      
+                      navigation.navigate('ReplacementDetail', {
+                       elevatorId,
+                       serviceId: service.id,
+                    });
+                    }
                   }}> 
                 {/* CARD HEADER */}
 
@@ -1270,6 +1416,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+
+  attachmentButton: {
+  marginTop: 12,
+  paddingVertical: 12,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#999',
+  alignItems: 'center',
+},
+
+  attachmentButtonText: {
+  fontSize: 15,
+  fontWeight: '600',
+},
 });
 
 export default ServiceHistory;
