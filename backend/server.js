@@ -967,6 +967,119 @@ app.get(
     }
 );
 // =====================================================
+// CẬP NHẬT LỊCH SỬ SỬA CHỮA / THAY THẾ
+// Technician + Admin được phép sửa
+// Owner không được phép sửa
+// =====================================================
+
+app.put(
+    "/elevators/:elevatorId/services/:serviceId",
+    authenticateToken,
+    (req, res) => {
+
+        // -------------------------------------------------
+        // 1. Kiểm tra quyền
+        // -------------------------------------------------
+
+        if (!["technician", "admin"].includes(req.user.role)) {
+            return res.status(403).json({
+                message: "Chỉ Technician hoặc Admin được sửa bản ghi"
+            });
+        }
+
+        const { elevatorId, serviceId } = req.params;
+        const { date, description } = req.body;
+
+        // -------------------------------------------------
+        // 2. Kiểm tra dữ liệu
+        // -------------------------------------------------
+
+        if (!date) {
+            return res.status(400).json({
+                message: "Thiếu ngày dịch vụ"
+            });
+        }
+
+        // -------------------------------------------------
+        // 3. Kiểm tra bản ghi có tồn tại
+        //    và chỉ cho sửa Repair / Replacement
+        // -------------------------------------------------
+
+        db.get(
+            `
+            SELECT
+                id,
+                type
+            FROM service_history
+            WHERE id = ?
+              AND elevatorId = ?
+              AND type IN ('repair', 'replacement')
+            `,
+            [serviceId, elevatorId],
+            (err, service) => {
+
+                if (err) {
+                    console.error(
+                        "Lỗi kiểm tra bản ghi dịch vụ:",
+                        err.message
+                    );
+
+                    return res.status(500).json({
+                        message: "Lỗi database"
+                    });
+                }
+
+                if (!service) {
+                    return res.status(404).json({
+                        message: "Không tìm thấy bản ghi sửa chữa/thay thế"
+                    });
+                }
+
+                // -------------------------------------------------
+                // 4. Cập nhật
+                // -------------------------------------------------
+
+                db.run(
+                    `
+                    UPDATE service_history
+                    SET
+                        date = ?,
+                        description = ?
+                    WHERE id = ?
+                      AND elevatorId = ?
+                      AND type IN ('repair', 'replacement')
+                    `,
+                    [
+                        date,
+                        description || null,
+                        serviceId,
+                        elevatorId
+                    ],
+                    function (err) {
+
+                        if (err) {
+                            console.error(
+                                "Lỗi cập nhật dịch vụ:",
+                                err.message
+                            );
+
+                            return res.status(500).json({
+                                message: "Lỗi database"
+                            });
+                        }
+
+                        res.json({
+                            message: "Đã cập nhật bản ghi dịch vụ",
+                            serviceId: Number(serviceId),
+                            type: service.type
+                        });
+                    }
+                );
+            }
+        );
+    }
+);
+// =====================================================
 // CẬP NHẬT MỘT PHIẾU BẢO TRÌ
 // Technician + Admin được phép sửa
 // Owner không được phép sửa

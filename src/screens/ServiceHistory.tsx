@@ -498,7 +498,7 @@ if (serviceType === 'maintenance') {
           },
           body: JSON.stringify({
             recordType: serviceType,
-            recordId: data.serviceId,
+            recordId: data.id,
             fileName:
               file.name || 'File đính kèm',
             fileUri: file.uri,

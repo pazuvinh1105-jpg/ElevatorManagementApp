@@ -6,9 +6,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {pick, types} from '@react-native-documents/picker';
 
 const ReplacementDetail = ({route}: any) => {
   const {elevatorId, serviceId} = route.params;
@@ -22,6 +25,13 @@ const ReplacementDetail = ({route}: any) => {
   const [service, setService] = useState<any>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
+  const [filesToDelete, setFilesToDelete] = useState<number[]>([]);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDate, setEditDate] = useState('');
+  const [editDescription, setEditDescription] = useState('');
 
   useEffect(() => {
     loadDetail();
@@ -70,7 +80,11 @@ const ReplacementDetail = ({route}: any) => {
       const attachmentData = await attachmentResponse.json();
       
       if (attachmentResponse.ok) {
-        setAttachments(attachmentData.attachments || []);
+        setAttachments(
+          Array.isArray(attachmentData)
+         ? attachmentData
+          : [],
+        );
       }
     } catch (error: any) {
       console.error('Lỗi lấy chi tiết thay thế:', error);
@@ -83,7 +97,150 @@ const ReplacementDetail = ({route}: any) => {
       setLoading(false);
     }
   };
+const startEditing = () => {
+  setEditDate(service.date || '');
+  setEditDescription(service.description || '');
+  setIsEditing(true);
+};
 
+const saveChanges = async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+
+    // 1. Cập nhật ngày và nội dung thay thế
+    const response = await fetch(
+      `http://127.0.0.1:3000/elevators/${elevatorId}/services/${serviceId}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          date: editDate,
+          description: editDescription,
+        }),
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || 'Không thể cập nhật bản ghi',
+      );
+    }
+
+    // 2. Lưu các file mới
+    for (const file of selectedFiles) {
+      let fileType = 'document';
+
+      if (file.type?.startsWith('image/')) {
+        fileType = 'image';
+      } else if (file.type?.startsWith('video/')) {
+        fileType = 'video';
+      }
+
+      const attachmentResponse = await fetch(
+        'http://127.0.0.1:3000/attachments',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            recordType: 'replacement',
+            recordId: Number(serviceId),
+            fileName: file.name || 'File đính kèm',
+            fileUri: file.uri,
+            fileType: fileType,
+            fileSize: file.size || null,
+          }),
+        },
+      );
+
+      const attachmentData = await attachmentResponse.json();
+
+      if (!attachmentResponse.ok) {
+        throw new Error(
+          attachmentData.message ||
+            'Không thể lưu file đính kèm',
+        );
+      }
+    }
+
+    // 3. Xóa các file cũ đã được đánh dấu xóa
+    for (const fileId of filesToDelete) {
+      const deleteResponse = await fetch(
+        `http://127.0.0.1:3000/attachments/${fileId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const deleteData = await deleteResponse.json();
+
+      if (!deleteResponse.ok) {
+        throw new Error(
+          deleteData.message ||
+            'Không thể xóa file đính kèm',
+        );
+      }
+    }
+
+    // 4. Reset trạng thái
+    setSelectedFiles([]);
+    setFilesToDelete([]);
+    setIsEditing(false);
+
+    // 5. Tải lại dữ liệu
+    await loadDetail();
+
+    Alert.alert(
+      'Thành công',
+      'Đã cập nhật bản ghi thay thế',
+    );
+  } catch (error: any) {
+    console.error('Lỗi cập nhật thay thế:', error);
+
+    Alert.alert(
+      'Lỗi',
+      error.message || 'Không thể cập nhật bản ghi',
+    );
+  }
+};
+
+const pickFiles = async () => {
+  try {
+    const result = await pick({
+      allowMultiSelection: true,
+      type: [types.images, types.video, types.allFiles],
+    });
+
+    setSelectedFiles(prev => [
+      ...prev,
+      ...result,
+    ]);
+  } catch (error) {
+    console.log('Chọn file bị hủy hoặc lỗi:', error);
+  }
+};
+
+const markFileForDelete = (fileId: number) => {
+  setFilesToDelete(prev =>
+    prev.includes(fileId)
+      ? prev
+      : [...prev, fileId],
+  );
+
+  setAttachments(prev =>
+    prev.filter(file => file.id !== fileId),
+  );
+};
   const getFileIcon = (fileType: string) => {
     if (fileType === 'image') {
       return '🖼️';
@@ -132,94 +289,215 @@ const ReplacementDetail = ({route}: any) => {
   }
 
   return (
-    <View style={styles.background}>
-      <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
+  <View style={styles.background}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
 
-          {/* Tiêu đề */}
-          <View style={styles.headerCard}>
-            <Text style={styles.title}>Chi tiết thay thế thiết bị</Text>
-            <Text style={styles.subtitle}>
-              Mã bản ghi: #{service.id}
+        {/* Tiêu đề */}
+        <View style={styles.headerCard}>
+          <Text style={styles.title}>
+            Chi tiết thay thế thiết bị
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Mã bản ghi: #{service.id}
+          </Text>
+
+          {!isEditing ? (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={startEditing}>
+              <Text style={styles.buttonText}>
+                ✏️ Chỉnh sửa
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setIsEditing(false);
+                  setSelectedFiles([]);
+                  setFilesToDelete([]);
+                  loadDetail();
+                }}>
+                <Text style={styles.buttonText}>
+                  Hủy
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={saveChanges}>
+                <Text style={styles.buttonText}>
+                  💾 Lưu
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Thông tin thay thế */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            🔄 Thông tin thay thế
+          </Text>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>
+              Thang máy
+            </Text>
+
+            <Text style={styles.value}>
+              {service.elevatorId}
             </Text>
           </View>
 
-          {/* Thông tin thay thế */}
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              🔄 Thông tin thay thế
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>
+              Ngày thay thế
             </Text>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Thang máy</Text>
-              <Text style={styles.value}>{service.elevatorId}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Ngày thay thế</Text>
-              <Text style={styles.value}>{service.date}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Kỹ thuật viên</Text>
+            {isEditing ? (
+              <TextInput
+                style={styles.editInput}
+                value={editDate}
+                onChangeText={setEditDate}
+                placeholder="Nhập ngày thay thế"
+              />
+            ) : (
               <Text style={styles.value}>
-                {service.technicianId || '---'}
+                {service.date}
               </Text>
-            </View>
+            )}
+          </View>
 
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.label}>Nội dung thay thế</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>
+              Kỹ thuật viên
+            </Text>
 
+            <Text style={styles.value}>
+              {service.technicianId || '---'}
+            </Text>
+          </View>
+
+          <View style={styles.descriptionContainer}>
+            <Text style={styles.label}>
+              Nội dung thay thế
+            </Text>
+
+            {isEditing ? (
+              <TextInput
+                style={styles.descriptionInput}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                placeholder="Nhập nội dung thay thế"
+                multiline
+                textAlignVertical="top"
+              />
+            ) : (
               <Text style={styles.description}>
                 {service.description || 'Không có mô tả'}
               </Text>
-            </View>
-          </View>
-
-          {/* File đính kèm */}
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>📎 File đính kèm</Text>
-
-            {attachments.length === 0 ? (
-              <Text style={styles.emptyText}>
-                Không có file đính kèm
-              </Text>
-            ) : (
-              attachments.map(file => (
-                <View
-                  key={file.id}
-                  style={styles.attachmentItem}>
-
-                  <Text style={styles.attachmentIcon}>
-                    {getFileIcon(file.fileType)}
-                  </Text>
-
-                  <View style={styles.attachmentInfo}>
-                    <Text
-                      style={styles.attachmentName}
-                      numberOfLines={2}>
-                      {file.fileName}
-                    </Text>
-
-                    <Text style={styles.attachmentMeta}>
-                      {file.fileType.toUpperCase()}
-                      {file.fileSize
-                        ? ` • ${formatFileSize(file.fileSize)}`
-                        : ''}
-                    </Text>
-                  </View>
-                </View>
-              ))
             )}
           </View>
-        </ScrollView>
-      </SafeAreaView>
-     </View>
-  );
-};
+        </View>
 
+        {/* File đính kèm */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            📎 File đính kèm
+          </Text>
+
+          {/* Nút thêm file khi chỉnh sửa */}
+          {isEditing && (
+            <TouchableOpacity
+              style={styles.addFileButton}
+              onPress={pickFiles}>
+              <Text style={styles.addFileText}>
+                ＋ Thêm file
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* File cũ */}
+          {attachments.length === 0 ? (
+            <Text style={styles.emptyText}>
+              Không có file đính kèm
+            </Text>
+          ) : (
+            attachments.map(file => (
+              <View
+                key={file.id}
+                style={styles.attachmentItem}>
+
+                <Text style={styles.attachmentIcon}>
+                  {getFileIcon(file.fileType)}
+                </Text>
+
+                <View style={styles.attachmentInfo}>
+                  <Text
+                    style={styles.attachmentName}
+                    numberOfLines={2}>
+                    {file.fileName}
+                  </Text>
+
+                  <Text style={styles.attachmentMeta}>
+                    {file.fileType.toUpperCase()}
+                    {file.fileSize
+                      ? ` • ${formatFileSize(file.fileSize)}`
+                      : ''}
+                  </Text>
+                </View>
+
+                {/* Nút xóa file khi chỉnh sửa */}
+                {isEditing && (
+                  <TouchableOpacity
+                    style={styles.deleteFileButton}
+                    onPress={() =>
+                      markFileForDelete(file.id)
+                    }>
+                    <Text style={styles.deleteFileText}>
+                      Xóa
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))
+          )}
+
+          {/* File mới được chọn */}
+          {isEditing && selectedFiles.length > 0 && (
+            <View style={styles.selectedFilesContainer}>
+              <Text style={styles.selectedFilesTitle}>
+                File mới:
+              </Text>
+
+              {selectedFiles.map((file, index) => (
+                <View
+                  key={`${file.uri}-${index}`}
+                  style={styles.selectedFileItem}>
+
+                  <Text
+                    style={styles.selectedFileName}
+                    numberOfLines={2}>
+                    📄 {file.name || 'File đính kèm'}
+                  </Text>
+
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  </View>
+);
+};
 export default ReplacementDetail;
 
 const styles = StyleSheet.create({
@@ -329,6 +607,129 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#7A8CA5',
+  },
+
+  /* =========================
+     NÚT CHỈNH SỬA
+     ========================= */
+
+  editButton: {
+    marginTop: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#123B78',
+    alignItems: 'center',
+  },
+
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 15,
+  },
+
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#777',
+    alignItems: 'center',
+  },
+
+  saveButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+  },
+
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+
+  /* =========================
+     Ô NHẬP KHI CHỈNH SỬA
+     ========================= */
+
+  editInput: {
+    flex: 1.4,
+    borderWidth: 1,
+    borderColor: '#D5DFEC',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 14,
+    color: '#123B78',
+    textAlign: 'right',
+  },
+
+  descriptionInput: {
+    marginTop: 8,
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: '#D5DFEC',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: '#263A55',
+    textAlignVertical: 'top',
+  },
+
+  /* =========================
+     FILE ĐÍNH KÈM
+     ========================= */
+
+  addFileButton: {
+    backgroundColor: '#E8F1FF',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+
+  addFileText: {
+    color: '#123B78',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  deleteFileButton: {
+    marginLeft: 8,
+    padding: 6,
+  },
+
+  deleteFileText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  selectedFilesContainer: {
+    marginTop: 8,
+  },
+
+  selectedFilesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#607A9B',
+    marginBottom: 8,
+  },
+
+  selectedFileItem: {
+    backgroundColor: '#F5F9FF',
+    borderWidth: 1,
+    borderColor: 'rgba(80,160,230,0.20)',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+
+  selectedFileName: {
+    fontSize: 13,
+    color: '#263A55',
   },
 
   attachmentItem: {

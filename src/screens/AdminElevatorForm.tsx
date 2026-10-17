@@ -50,13 +50,62 @@ const AdminElevatorForm = ({navigation, route}: Props) => {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, [elevatorId]);
+const checkElevatorId = async () => {
+  if (elevatorId) return;
 
+  const id = values.elevatorId?.trim();
+
+  if (!id) return;
+
+  try {
+    const elevators = await adminRequest<Elevator[]>('/elevators');
+
+    const isDuplicate = elevators.some(
+      item =>
+        item.elevatorId.trim().toLowerCase() === id.toLowerCase(),
+    );
+
+    if (isDuplicate) {
+      setError('Mã thang máy đã tồn tại. Vui lòng nhập mã khác.');
+    }
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Không thể kiểm tra mã thang máy.',
+    );
+  }
+};
   const save = async () => {
     const missing = fields.find(field => !values[field.key]?.trim());
     if (missing) {
       setError(`Vui lòng nhập ${missing.label.toLowerCase()}.`);
       return;
     }
+    // Kiểm tra mã thang máy đã tồn tại khi thêm mới
+  if (!elevatorId) {
+    try {
+      const elevators = await adminRequest<Elevator[]>('/elevators');
+
+      const isDuplicate = elevators.some(
+        item =>
+          item.elevatorId.trim().toLowerCase() ===
+          values.elevatorId.trim().toLowerCase(),
+      );
+
+      if (isDuplicate) {
+        setError('Mã thang máy đã tồn tại. Vui lòng nhập mã khác.');
+        return;
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể kiểm tra mã thang máy.',
+      );
+      return;
+    }
+  }
     const numeric = fields.filter(field => field.numeric);
     if (numeric.some(field => !Number.isFinite(Number(values[field.key])))) {
       setError('Các thông số số phải là số hợp lệ.');
@@ -111,71 +160,159 @@ const AdminElevatorForm = ({navigation, route}: Props) => {
   ) : null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
-      <Text style={styles.title}>{elevatorId ? 'Chỉnh sửa thang máy' : 'Thêm thang máy'}</Text>
-      <Text style={styles.subtitle}>Vui lòng điền đầy đủ tất cả trường trước khi lưu.</Text>
-      {loading ? <ActivityIndicator color="#135FC4" /> : fields.map(field => (
+  <ScrollView
+    style={styles.screen}
+    contentContainerStyle={styles.content}
+    keyboardShouldPersistTaps="always"
+  >
+    <Text style={styles.title}>
+      {elevatorId ? 'Chỉnh sửa thang máy' : 'Thêm thang máy'}
+    </Text>
+
+    <Text style={styles.subtitle}>
+      Vui lòng điền đầy đủ tất cả trường trước khi lưu.
+    </Text>
+
+    {loading ? (
+      <ActivityIndicator color="#135FC4" />
+    ) : (
+      fields.map(field => (
         <React.Fragment key={field.key}>
           <Text style={styles.label}>{field.label} *</Text>
+
           {field.key === 'installationDate' ? (
             <DatePickerField
               style={styles.input}
               value={values.installationDate || ''}
               onChangeText={value => {
-                setValues(previous => ({...previous, installationDate: value}));
+                setValues(previous => ({
+                  ...previous,
+                  installationDate: value,
+                }));
                 setError('');
               }}
             />
-          ) : field.key === 'speed' || field.key === 'status' || field.key === 'driveType' ? (
+          ) : field.key === 'speed' ||
+            field.key === 'status' ||
+            field.key === 'driveType' ? (
             <TouchableOpacity
               accessibilityRole="button"
               style={[styles.input, localStyles.select]}
-              onPress={() => setActiveSuggestions(activeSuggestions === field.key ? null : field.key)}>
-              <Text style={values[field.key] ? localStyles.value : localStyles.placeholder}>
+              onPress={() =>
+                setActiveSuggestions(
+                  activeSuggestions === field.key ? null : field.key,
+                )
+              }
+            >
+              <Text
+                style={
+                  values[field.key]
+                    ? localStyles.value
+                    : localStyles.placeholder
+                }
+              >
                 {field.key === 'speed' && values.speed
-                  ? `${speeds.find(speed => Number(speed) === Number(values.speed)) ?? values.speed} m/s`
-                  : values[field.key] || `Chọn ${field.label.toLowerCase()}`}
+                  ? `${
+                      speeds.find(
+                        speed => Number(speed) === Number(values.speed),
+                      ) ?? values.speed
+                    } m/s`
+                  : values[field.key] ||
+                    `Chọn ${field.label.toLowerCase()}`}
               </Text>
             </TouchableOpacity>
           ) : (
-              <TextInput
-                style={styles.input}
-                value={values[field.key] || ''}
-                placeholder={field.placeholder}
-                placeholderTextColor="#93A5BA"
-                onPressIn={() => {
-                  if (field.key === 'type' || field.key === 'manufacturer' || field.key === 'capacity') {
-                    setActiveSuggestions(current => current === field.key ? null : field.key);
-                  } else {
-                    setActiveSuggestions(null);
-                  }
-                }}
-                onChangeText={value => {
-                  setValues(previous => ({...previous, [field.key]: value}));
-                  setError('');
-                }}
-                editable={field.key !== 'elevatorId' || !elevatorId}
-                keyboardType={field.numeric ? 'decimal-pad' : 'default'}
-              />
+            <TextInput
+              style={styles.input}
+              value={values[field.key] || ''}
+              placeholder={field.placeholder}
+              placeholderTextColor="#93A5BA"
+              onPressIn={() => {
+                if (
+                  field.key === 'type' ||
+                  field.key === 'manufacturer' ||
+                  field.key === 'capacity'
+                ) {
+                  setActiveSuggestions(current =>
+                    current === field.key ? null : field.key,
+                  );
+                } else {
+                  setActiveSuggestions(null);
+                }
+              }}
+              onChangeText={value => {
+                setValues(previous => ({
+                  ...previous,
+                  [field.key]: value,
+                }));
+                setError('');
+              }}
+              onBlur={() => {
+                if (field.key === 'elevatorId') {
+                  checkElevatorId();
+                }
+              }}
+              editable={field.key !== 'elevatorId' || !elevatorId}
+              keyboardType={
+                field.numeric ? 'decimal-pad' : 'default'
+              }
+            />
           )}
-          {activeSuggestions === 'type' && field.key === 'type' && renderOptions('type', elevatorTypes)}
-          {activeSuggestions === 'manufacturer' && field.key === 'manufacturer' && renderOptions('manufacturer', manufacturers)}
-          {activeSuggestions === 'speed' && field.key === 'speed' && renderOptions('speed', speeds, ' m/s')}
-          {activeSuggestions === 'status' && field.key === 'status' && renderOptions('status', statuses)}
-          {activeSuggestions === 'driveType' && field.key === 'driveType' && renderOptions('driveType', driveTypes)}
-          {activeSuggestions === 'capacity' && field.key === 'capacity' && (
-            values.capacity?.trim()
-              ? renderOptions('capacity', capacities.filter(option => option.startsWith(values.capacity.trim())))
-              : <Text style={localStyles.suggestionHint}>Nhập tải trọng</Text>
-          )}
+
+          {activeSuggestions === 'type' &&
+            field.key === 'type' &&
+            renderOptions('type', elevatorTypes)}
+
+          {activeSuggestions === 'manufacturer' &&
+            field.key === 'manufacturer' &&
+            renderOptions('manufacturer', manufacturers)}
+
+          {activeSuggestions === 'speed' &&
+            field.key === 'speed' &&
+            renderOptions('speed', speeds, ' m/s')}
+
+          {activeSuggestions === 'status' &&
+            field.key === 'status' &&
+            renderOptions('status', statuses)}
+
+          {activeSuggestions === 'driveType' &&
+            field.key === 'driveType' &&
+            renderOptions('driveType', driveTypes)}
+
+          {activeSuggestions === 'capacity' &&
+            field.key === 'capacity' && (
+              values.capacity?.trim() ? (
+                renderOptions(
+                  'capacity',
+                  capacities.filter(option =>
+                    option.startsWith(values.capacity.trim()),
+                  ),
+                )
+              ) : (
+                <Text style={localStyles.suggestionHint}>
+                  Nhập tải trọng
+                </Text>
+              )
+            )}
         </React.Fragment>
-      ))}
-      {!!error && <Text style={styles.error}>{error}</Text>}
-      {!loading && <TouchableOpacity style={styles.button} onPress={save} disabled={saving}>
-        <Text style={styles.buttonText}>{saving ? 'Đang lưu...' : 'Lưu thang máy'}</Text>
-      </TouchableOpacity>}
-    </ScrollView>
-  );
+      ))
+    )}
+
+    {!!error && <Text style={styles.error}>{error}</Text>}
+
+    {!loading && (
+      <TouchableOpacity
+        style={styles.button}
+        onPress={save}
+        disabled={saving}
+      >
+        <Text style={styles.buttonText}>
+          {saving ? 'Đang lưu...' : 'Lưu thang máy'}
+        </Text>
+      </TouchableOpacity>
+    )}
+  </ScrollView>
+);
 };
 
 const localStyles = StyleSheet.create({
