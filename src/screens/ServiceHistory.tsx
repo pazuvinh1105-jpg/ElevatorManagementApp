@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,11 +12,12 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {pick, types} from '@react-native-documents/picker';
+import { API_URL } from '../config/firebase';
+import { pick, types } from '@react-native-documents/picker';
 import DatePickerField from '../components/DatePickerField';
-import {sortRecordsByDate} from '../utils/sortRecordsByDate';
+import { sortRecordsByDate } from '../utils/sortRecordsByDate';
 
-const ServiceHistory = ({route, navigation}: any) => {
+const ServiceHistory = ({ route, navigation }: any) => {
   const selectedElevatorId = route.params?.elevatorId;
 
   const [elevatorId, setElevatorId] = useState<string | null>(null);
@@ -25,13 +26,9 @@ const ServiceHistory = ({route, navigation}: any) => {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [serviceType, setServiceType] = useState('maintenance');
-  const [maintenanceRound, setMaintenanceRound] = useState<
-  number | null
-  >(null);
+  const [maintenanceRound, setMaintenanceRound] = useState<number | null>(null);
 
-  const [maintenanceChecklists, setMaintenanceChecklists] = useState<
-   any[]
-  >([]);
+  const [maintenanceChecklists, setMaintenanceChecklists] = useState<any[]>([]);
 
   const [loadingChecklists, setLoadingChecklists] = useState(false);
   const [checklistResults, setChecklistResults] = useState<{
@@ -48,10 +45,7 @@ const ServiceHistory = ({route, navigation}: any) => {
         const token = await AsyncStorage.getItem('token');
 
         if (!token) {
-          Alert.alert(
-            'Lỗi',
-            'Không tìm thấy thông tin đăng nhập.',
-          );
+          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
           return;
         }
 
@@ -60,23 +54,19 @@ const ServiceHistory = ({route, navigation}: any) => {
         // Nếu Technician chưa truyền elevatorId
         // thì lấy thang máy được phân quyền của Owner
         if (!currentElevatorId) {
-          const elevatorResponse = await fetch(
-            'http://127.0.0.1:3000/elevators',
-            {
-              method: 'GET',
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+          const elevatorResponse = await fetch(`${API_URL}/elevators`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
             },
-          );
+          });
 
           const elevatorData = await elevatorResponse.json();
 
           if (!elevatorResponse.ok) {
             Alert.alert(
               'Lỗi',
-              elevatorData.message ||
-                'Không lấy được thông tin thang máy.',
+              elevatorData.message || 'Không lấy được thông tin thang máy.',
             );
             return;
           }
@@ -96,7 +86,7 @@ const ServiceHistory = ({route, navigation}: any) => {
 
         // Lấy lịch sử dịch vụ của đúng thang máy
         const serviceResponse = await fetch(
-          `http://127.0.0.1:3000/elevators/${currentElevatorId}/services`,
+          `${API_URL}/elevators/${currentElevatorId}/services`,
           {
             method: 'GET',
             headers: {
@@ -110,23 +100,16 @@ const ServiceHistory = ({route, navigation}: any) => {
         if (!serviceResponse.ok) {
           Alert.alert(
             'Lỗi',
-            serviceData.message ||
-              'Không lấy được lịch sử dịch vụ.',
+            serviceData.message || 'Không lấy được lịch sử dịch vụ.',
           );
           return;
         }
 
         setServices(sortRecordsByDate(serviceData, (item: any) => item.date));
       } catch (error) {
-        console.error(
-          'Lỗi lấy lịch sử dịch vụ:',
-          error,
-        );
+        console.error('Lỗi lấy lịch sử dịch vụ:', error);
 
-        Alert.alert(
-          'Lỗi kết nối',
-          'Không thể kết nối tới Backend.',
-        );
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
       } finally {
         setLoading(false);
       }
@@ -152,184 +135,114 @@ const ServiceHistory = ({route, navigation}: any) => {
     }
   };
   const handleSelectMaintenanceRound = async (round: number) => {
-  try {
-    setMaintenanceRound(round);
-    setLoadingChecklists(true);
-    setMaintenanceChecklists([]);
-    setChecklistResults({});
+    try {
+      setMaintenanceRound(round);
+      setLoadingChecklists(true);
+      setMaintenanceChecklists([]);
+      setChecklistResults({});
 
-    const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('token');
 
-    if (!token) {
-      Alert.alert(
-        'Lỗi',
-        'Không tìm thấy thông tin đăng nhập.',
-      );
-      return;
-    }
+      if (!token) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+        return;
+      }
 
-    const response = await fetch(
-      `http://127.0.0.1:3000/maintenance/checklists/${round}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/maintenance/checklists/${round}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      },
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      Alert.alert(
-        'Lỗi',
-        data.message || 'Không thể lấy checklist bảo trì.',
       );
-      return;
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Lỗi', data.message || 'Không thể lấy checklist bảo trì.');
+        return;
+      }
+
+      setMaintenanceChecklists(data.checklists || []);
+    } catch (error) {
+      console.error('Lỗi lấy checklist bảo trì:', error);
+
+      Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+    } finally {
+      setLoadingChecklists(false);
     }
+  };
+  const handlePickFiles = async () => {
+    try {
+      const result = await pick({
+        allowMultiSelection: true,
+        type: [types.images, types.video, types.allFiles],
+      });
 
-    setMaintenanceChecklists(data.checklists || []);
-  } catch (error) {
-    console.error(
-      'Lỗi lấy checklist bảo trì:',
-      error,
-    );
-
-    Alert.alert(
-      'Lỗi kết nối',
-      'Không thể kết nối tới Backend.',
-    );
-  } finally {
-    setLoadingChecklists(false);
-  }
-};
-const handlePickFiles = async () => {
-  try {
-    const result = await pick({
-      allowMultiSelection: true,
-      type: [types.images, types.video, types.allFiles],
-    });
-
-    setSelectedFiles(result);
-  } catch (error) {
-    console.log('Chọn file bị hủy hoặc lỗi:', error);
-  }
-};
+      setSelectedFiles(result);
+    } catch (error) {
+      console.log('Chọn file bị hủy hoặc lỗi:', error);
+    }
+  };
   const handleAddService = async () => {
-  if (!serviceDate.trim() || !description.trim()) {
-    Alert.alert(
-      'Thiếu thông tin',
-      'Vui lòng nhập ngày thực hiện và nội dung dịch vụ.',
-    );
-    return;
-  }
-
-  if (!elevatorId) {
-    Alert.alert(
-      'Lỗi',
-      'Không xác định được thang máy.',
-    );
-    return;
-  }
-  
-  // ==========================================
-// BẢO TRÌ
-// ==========================================
-if (serviceType === 'maintenance') {
-  if (maintenanceRound === null) {
-    Alert.alert(
-      'Thiếu thông tin',
-      'Vui lòng chọn lần bảo trì.',
-    );
-    return;
-  }
-
-  const totalChecklist =
-    maintenanceChecklists.length;
-
-  const completedChecklist =
-    Object.keys(checklistResults).length;
-
-  if (
-    totalChecklist === 0 ||
-    completedChecklist !== totalChecklist
-  ) {
-    Alert.alert(
-      'Chưa hoàn thành checklist',
-      `Vui lòng đánh giá đầy đủ tất cả ${totalChecklist} mục checklist.\n\nĐã đánh giá: ${completedChecklist}/${totalChecklist} mục.`,
-    );
-    return;
-  }
-
-  try {
-    setSaving(true);
-
-    const token =
-      await AsyncStorage.getItem('token');
-
-    if (!token) {
+    if (!serviceDate.trim() || !description.trim()) {
       Alert.alert(
-        'Lỗi',
-        'Không tìm thấy thông tin đăng nhập.',
+        'Thiếu thông tin',
+        'Vui lòng nhập ngày thực hiện và nội dung dịch vụ.',
       );
       return;
     }
 
-    // Chuyển checklistResults thành mảng
-    // mà Backend /maintenance yêu cầu
-    const results = maintenanceChecklists.map(
-      item => ({
-        checklistId: item.id,
-        result: checklistResults[item.id],
-      }),
-    );
-
-    // ==========================================
-    // TẠO PHIẾU BẢO TRÌ
-    // ==========================================
-    const response = await fetch(
-      `http://127.0.0.1:3000/elevators/${elevatorId}/maintenance`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          round: maintenanceRound,
-          date: serviceDate.trim(),
-          description: description.trim(),
-          results,
-        }),
-      },
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      Alert.alert(
-        'Lỗi',
-        data.message ||
-          'Không thể tạo phiếu bảo trì.',
-      );
+    if (!elevatorId) {
+      Alert.alert('Lỗi', 'Không xác định được thang máy.');
       return;
     }
 
     // ==========================================
-    // LƯU FILE ĐÍNH KÈM
+    // BẢO TRÌ
     // ==========================================
-    if (selectedFiles.length > 0) {
-      for (const file of selectedFiles) {
-        let fileType = 'document';
+    if (serviceType === 'maintenance') {
+      if (maintenanceRound === null) {
+        Alert.alert('Thiếu thông tin', 'Vui lòng chọn lần bảo trì.');
+        return;
+      }
 
-        if (file.type?.startsWith('image/')) {
-          fileType = 'image';
-        } else if (file.type?.startsWith('video/')) {
-          fileType = 'video';
+      const totalChecklist = maintenanceChecklists.length;
+
+      const completedChecklist = Object.keys(checklistResults).length;
+
+      if (totalChecklist === 0 || completedChecklist !== totalChecklist) {
+        Alert.alert(
+          'Chưa hoàn thành checklist',
+          `Vui lòng đánh giá đầy đủ tất cả ${totalChecklist} mục checklist.\n\nĐã đánh giá: ${completedChecklist}/${totalChecklist} mục.`,
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        const token = await AsyncStorage.getItem('token');
+
+        if (!token) {
+          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+          return;
         }
 
-        const attachmentResponse = await fetch(
-          'http://127.0.0.1:3000/attachments',
+        // Chuyển checklistResults thành mảng
+        // mà Backend /maintenance yêu cầu
+        const results = maintenanceChecklists.map(item => ({
+          checklistId: item.id,
+          result: checklistResults[item.id],
+        }));
+
+        // ==========================================
+        // TẠO PHIẾU BẢO TRÌ
+        // ==========================================
+        const response = await fetch(
+          `${API_URL}/elevators/${elevatorId}/maintenance`,
           {
             method: 'POST',
             headers: {
@@ -337,159 +250,133 @@ if (serviceType === 'maintenance') {
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              recordType: 'maintenance',
-              recordId: data.serviceId,
-              fileName: file.name,
-              fileUri: file.uri,
-              fileType,
-              fileSize: file.size || null,
+              round: maintenanceRound,
+              date: serviceDate.trim(),
+              description: description.trim(),
+              results,
             }),
           },
         );
 
-        const attachmentData =
-          await attachmentResponse.json();
+        const data = await response.json();
 
-        if (!attachmentResponse.ok) {
-          console.error(
-            'Lỗi lưu attachment:',
-            attachmentData,
-          );
-
-          Alert.alert(
-            'Cảnh báo',
-            `Phiếu bảo trì đã được tạo nhưng không lưu được file "${file.name}".`,
-          );
-
+        if (!response.ok) {
+          Alert.alert('Lỗi', data.message || 'Không thể tạo phiếu bảo trì.');
           return;
         }
+
+        // ==========================================
+        // LƯU FILE ĐÍNH KÈM
+        // ==========================================
+        if (selectedFiles.length > 0) {
+          for (const file of selectedFiles) {
+            let fileType = 'document';
+
+            if (file.type?.startsWith('image/')) {
+              fileType = 'image';
+            } else if (file.type?.startsWith('video/')) {
+              fileType = 'video';
+            }
+
+            const attachmentResponse = await fetch(`${API_URL}/attachments`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                recordType: 'maintenance',
+                recordId: data.serviceId,
+                fileName: file.name,
+                fileUri: file.uri,
+                fileType,
+                fileSize: file.size || null,
+              }),
+            });
+
+            const attachmentData = await attachmentResponse.json();
+
+            if (!attachmentResponse.ok) {
+              console.error('Lỗi lưu attachment:', attachmentData);
+
+              Alert.alert(
+                'Cảnh báo',
+                `Phiếu bảo trì đã được tạo nhưng không lưu được file "${file.name}".`,
+              );
+
+              return;
+            }
+          }
+        }
+
+        // ==========================================
+        // THÔNG BÁO THÀNH CÔNG
+        // ==========================================
+        Alert.alert(
+          'Thành công',
+          `Đã tạo phiếu bảo trì lần ${maintenanceRound}.${
+            selectedFiles.length > 0
+              ? `\n\nĐã lưu ${selectedFiles.length} file đính kèm.`
+              : ''
+          }`,
+        );
+
+        // ==========================================
+        // RESET FORM
+        // ==========================================
+        setServiceType('maintenance');
+        setMaintenanceRound(null);
+        setMaintenanceChecklists([]);
+        setChecklistResults({});
+        setServiceDate('');
+        setDescription('');
+        setSelectedFiles([]);
+        setShowAddForm(false);
+
+        // ==========================================
+        // TẢI LẠI LỊCH SỬ DỊCH VỤ
+        // ==========================================
+        const refreshResponse = await fetch(
+          `${API_URL}/elevators/${elevatorId}/services`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const refreshData = await refreshResponse.json();
+
+        if (refreshResponse.ok) {
+          setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
+        }
+      } catch (error) {
+        console.error('Lỗi tạo phiếu bảo trì:', error);
+
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+      } finally {
+        setSaving(false);
       }
+
+      return;
     }
 
     // ==========================================
-    // THÔNG BÁO THÀNH CÔNG
+    // CÁC DỊCH VỤ KHÁC
     // ==========================================
-    Alert.alert(
-      'Thành công',
-      `Đã tạo phiếu bảo trì lần ${maintenanceRound}.${
-        selectedFiles.length > 0
-          ? `\n\nĐã lưu ${selectedFiles.length} file đính kèm.`
-          : ''
-      }`,
-    );
+    try {
+      setSaving(true);
 
-    // ==========================================
-    // RESET FORM
-    // ==========================================
-    setServiceType('maintenance');
-    setMaintenanceRound(null);
-    setMaintenanceChecklists([]);
-    setChecklistResults({});
-    setServiceDate('');
-    setDescription('');
-    setSelectedFiles([]);
-    setShowAddForm(false);
+      const token = await AsyncStorage.getItem('token');
 
-    // ==========================================
-    // TẢI LẠI LỊCH SỬ DỊCH VỤ
-    // ==========================================
-    const refreshResponse = await fetch(
-      `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    );
-
-    const refreshData =
-      await refreshResponse.json();
-
-    if (refreshResponse.ok) {
-      setServices(
-        sortRecordsByDate(
-          refreshData,
-          (item: any) => item.date,
-        ),
-      );
-    }
-  } catch (error) {
-    console.error(
-      'Lỗi tạo phiếu bảo trì:',
-      error,
-    );
-
-    Alert.alert(
-      'Lỗi kết nối',
-      'Không thể kết nối tới Backend.',
-    );
-  } finally {
-    setSaving(false);
-  }
-
-  return;
-}
-
-  // ==========================================
-  // CÁC DỊCH VỤ KHÁC
-  // ==========================================
- try {
-  setSaving(true);
-
-  const token =
-    await AsyncStorage.getItem('token');
-
-  if (!token) {
-    Alert.alert(
-      'Lỗi',
-      'Không tìm thấy thông tin đăng nhập.',
-    );
-    return;
-  }
-
-  const response = await fetch(
-    `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        type: serviceType,
-        date: serviceDate.trim(),
-        description: description.trim(),
-      }),
-    },
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    Alert.alert(
-      'Lỗi',
-      data.message ||
-        'Không thể thêm lịch sử dịch vụ.',
-    );
-    return;
-  }
-
-  // ==========================================
-  // LƯU FILE ĐÍNH KÈM
-  // ==========================================
-  if (selectedFiles.length > 0) {
-    for (const file of selectedFiles) {
-      let fileType = 'document';
-
-      if (file.type?.startsWith('image/')) {
-        fileType = 'image';
-      } else if (file.type?.startsWith('video/')) {
-        fileType = 'video';
+      if (!token) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+        return;
       }
 
-      const attachmentResponse = await fetch(
-        'http://127.0.0.1:3000/attachments',
+      const response = await fetch(
+        `${API_URL}/elevators/${elevatorId}/services`,
         {
           method: 'POST',
           headers: {
@@ -497,276 +384,271 @@ if (serviceType === 'maintenance') {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            recordType: serviceType,
-            recordId: data.id,
-            fileName:
-              file.name || 'File đính kèm',
-            fileUri: file.uri,
-            fileType,
-            fileSize: file.size || null,
+            type: serviceType,
+            date: serviceDate.trim(),
+            description: description.trim(),
           }),
         },
       );
 
-      const attachmentData =
-        await attachmentResponse.json();
+      const data = await response.json();
 
-      if (!attachmentResponse.ok) {
-        console.error(
-          'Lỗi lưu attachment:',
-          attachmentData,
-        );
-
-        Alert.alert(
-          'Cảnh báo',
-          `Phiếu ${
-            serviceType === 'repair'
-              ? 'sửa chữa'
-              : 'thay thế'
-          } đã được tạo nhưng không lưu được file "${
-            file.name
-          }".`,
-        );
-
+      if (!response.ok) {
+        Alert.alert('Lỗi', data.message || 'Không thể thêm lịch sử dịch vụ.');
         return;
       }
+
+      // ==========================================
+      // LƯU FILE ĐÍNH KÈM
+      // ==========================================
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          let fileType = 'document';
+
+          if (file.type?.startsWith('image/')) {
+            fileType = 'image';
+          } else if (file.type?.startsWith('video/')) {
+            fileType = 'video';
+          }
+
+          const attachmentResponse = await fetch(`${API_URL}/attachments`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              recordType: serviceType,
+              recordId: data.id,
+              fileName: file.name || 'File đính kèm',
+              fileUri: file.uri,
+              fileType,
+              fileSize: file.size || null,
+            }),
+          });
+
+          const attachmentData = await attachmentResponse.json();
+
+          if (!attachmentResponse.ok) {
+            console.error('Lỗi lưu attachment:', attachmentData);
+
+            Alert.alert(
+              'Cảnh báo',
+              `Phiếu ${
+                serviceType === 'repair' ? 'sửa chữa' : 'thay thế'
+              } đã được tạo nhưng không lưu được file "${file.name}".`,
+            );
+
+            return;
+          }
+        }
+      }
+
+      Alert.alert('Thành công', 'Đã thêm bản ghi dịch vụ.');
+
+      setServiceType('maintenance');
+      setMaintenanceRound(null);
+      setMaintenanceChecklists([]);
+      setChecklistResults({});
+      setServiceDate('');
+      setDescription('');
+      setSelectedFiles([]);
+      setShowAddForm(false);
+
+      // Tải lại danh sách
+      const refreshResponse = await fetch(
+        `${API_URL}/elevators/${elevatorId}/services`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const refreshData = await refreshResponse.json();
+
+      if (refreshResponse.ok) {
+        setServices(
+          sortRecordsByDate(
+            refreshData.filter((item: any) => item.type !== 'inspection'),
+            (item: any) => item.date,
+          ),
+        );
+      }
+    } catch (error) {
+      console.error('Lỗi thêm lịch sử dịch vụ:', error);
+
+      Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+    } finally {
+      setSaving(false);
     }
-  }
-
-  Alert.alert(
-    'Thành công',
-    'Đã thêm bản ghi dịch vụ.',
-  );
-
-  setServiceType('maintenance');
-  setMaintenanceRound(null);
-  setMaintenanceChecklists([]);
-  setChecklistResults({});
-  setServiceDate('');
-  setDescription('');
-  setSelectedFiles([]);
-  setShowAddForm(false);
-
-  // Tải lại danh sách
-  const refreshResponse = await fetch(
-    `http://127.0.0.1:3000/elevators/${elevatorId}/services`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-
-  const refreshData =
-    await refreshResponse.json();
-
-  if (refreshResponse.ok) {
-    setServices(
-      sortRecordsByDate(
-        refreshData.filter(
-          (item: any) =>
-            item.type !== 'inspection',
-        ),
-        (item: any) => item.date,
-      ),
-    );
-  }
-} catch (error) {
-  console.error(
-    'Lỗi thêm lịch sử dịch vụ:',
-    error,
-  );
-
-  Alert.alert(
-    'Lỗi kết nối',
-    'Không thể kết nối tới Backend.',
-  );
-} finally {
-  setSaving(false);
-}
   };
- return (
-  <ImageBackground
-    source={require('../../assets/background.jpg')}
-    style={styles.background}
-    resizeMode="cover">
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="always"
-        showsVerticalScrollIndicator={false}>
+  return (
+    <ImageBackground
+      source={require('../../assets/background.jpg')}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ================= HEADER ================= */}
 
-        {/* ================= HEADER ================= */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Lịch sử dịch vụ</Text>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            Lịch sử dịch vụ
-          </Text>
-
-          <Text style={styles.subtitle}>
-            Theo dõi quá trình bảo trì và sửa chữa
-          </Text>
-
-          {elevatorId && (
-            <Text style={styles.elevatorId}>
-              Mã thang máy: {elevatorId}
-            </Text>
-          )}
-
-          {/* Chỉ hiển thị nút thêm trong luồng Technician */}
-          {selectedElevatorId && (
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowAddForm(!showAddForm)}>
-              <Text style={styles.addButtonText}>
-                {showAddForm
-                  ? 'Đóng biểu mẫu'
-                  : '+ Thêm dịch vụ'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ================= ADD FORM ================= */}
-
-        {showAddForm && selectedElevatorId && (
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>
-              Thêm bản ghi dịch vụ
+            <Text style={styles.subtitle}>
+              Theo dõi quá trình bảo trì và sửa chữa
             </Text>
 
-            {/* ================= LOẠI DỊCH VỤ ================= */}
-
-            <Text style={styles.inputLabel}>
-              Loại dịch vụ
-            </Text>
-
-            <View style={styles.typeRow}>
-
-              {/* BẢO TRÌ */}
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  serviceType === 'maintenance' &&
-                    styles.selectedTypeButton,
-                ]}
-                onPress={() => {
-                  setServiceType('maintenance');
-                  setMaintenanceRound(null);
-                  setMaintenanceChecklists([]);
-                  setChecklistResults({});
-                }}>
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    serviceType === 'maintenance' &&
-                      styles.selectedTypeButtonText,
-                  ]}>
-                  Bảo trì
-                </Text>
-              </TouchableOpacity>
-
-              {/* SỬA CHỮA */}
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  serviceType === 'repair' &&
-                    styles.selectedTypeButton,
-                ]}
-                onPress={() => {
-                  setServiceType('repair');
-                  setMaintenanceRound(null);
-                  setMaintenanceChecklists([]);
-                  setChecklistResults({});
-                }}>
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    serviceType === 'repair' &&
-                      styles.selectedTypeButtonText,
-                  ]}>
-                  Sửa chữa
-                </Text>
-              </TouchableOpacity>
-
-              {/* THAY THẾ */}
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  serviceType === 'replacement' &&
-                    styles.selectedTypeButton,
-                ]}
-                onPress={() => {
-                  setServiceType('replacement');
-                  setMaintenanceRound(null);
-                  setMaintenanceChecklists([]);
-                  setChecklistResults({});
-                }}>
-                <Text
-                  style={[
-                    styles.typeButtonText,
-                    serviceType === 'replacement' &&
-                      styles.selectedTypeButtonText,
-                  ]}>
-                  Thay thế
-                </Text>
-              </TouchableOpacity>
-
-            </View>
-
-            {/* ================= LẦN BẢO TRÌ ================= */}
-
-            {serviceType === 'maintenance' && (
-              <>
-                <Text style={styles.inputLabel}>
-                  Lần bảo trì
-                </Text>
-
-                <View style={styles.typeRow}>
-                  {[1, 2, 3].map(round => (
-                    <TouchableOpacity
-                      key={round}
-                      style={[
-                        styles.typeButton,
-                        maintenanceRound === round &&
-                          styles.selectedTypeButton,
-                      ]}
-                      onPress={() =>
-                        handleSelectMaintenanceRound(round)
-                      }>
-                      <Text
-                        style={[
-                          styles.typeButtonText,
-                          maintenanceRound === round &&
-                            styles.selectedTypeButtonText,
-                        ]}>
-                        Lần {round}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
+            {elevatorId && (
+              <Text style={styles.elevatorId}>Mã thang máy: {elevatorId}</Text>
             )}
 
-            {/* ================= CHECKLIST BẢO TRÌ ================= */}
+            {/* Chỉ hiển thị nút thêm trong luồng Technician */}
+            {selectedElevatorId && (
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowAddForm(!showAddForm)}
+              >
+                <Text style={styles.addButtonText}>
+                  {showAddForm ? 'Đóng biểu mẫu' : '+ Thêm dịch vụ'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            {serviceType === 'maintenance' &&
-              maintenanceRound !== null && (
-                <>
-                  <Text style={styles.inputLabel}>
-                    Checklist bảo trì
+          {/* ================= ADD FORM ================= */}
+
+          {showAddForm && selectedElevatorId && (
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>Thêm bản ghi dịch vụ</Text>
+
+              {/* ================= LOẠI DỊCH VỤ ================= */}
+
+              <Text style={styles.inputLabel}>Loại dịch vụ</Text>
+
+              <View style={styles.typeRow}>
+                {/* BẢO TRÌ */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    serviceType === 'maintenance' && styles.selectedTypeButton,
+                  ]}
+                  onPress={() => {
+                    setServiceType('maintenance');
+                    setMaintenanceRound(null);
+                    setMaintenanceChecklists([]);
+                    setChecklistResults({});
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      serviceType === 'maintenance' &&
+                        styles.selectedTypeButtonText,
+                    ]}
+                  >
+                    Bảo trì
                   </Text>
+                </TouchableOpacity>
+
+                {/* SỬA CHỮA */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    serviceType === 'repair' && styles.selectedTypeButton,
+                  ]}
+                  onPress={() => {
+                    setServiceType('repair');
+                    setMaintenanceRound(null);
+                    setMaintenanceChecklists([]);
+                    setChecklistResults({});
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      serviceType === 'repair' && styles.selectedTypeButtonText,
+                    ]}
+                  >
+                    Sửa chữa
+                  </Text>
+                </TouchableOpacity>
+
+                {/* THAY THẾ */}
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    serviceType === 'replacement' && styles.selectedTypeButton,
+                  ]}
+                  onPress={() => {
+                    setServiceType('replacement');
+                    setMaintenanceRound(null);
+                    setMaintenanceChecklists([]);
+                    setChecklistResults({});
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      serviceType === 'replacement' &&
+                        styles.selectedTypeButtonText,
+                    ]}
+                  >
+                    Thay thế
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* ================= LẦN BẢO TRÌ ================= */}
+
+              {serviceType === 'maintenance' && (
+                <>
+                  <Text style={styles.inputLabel}>Lần bảo trì</Text>
+
+                  <View style={styles.typeRow}>
+                    {[1, 2, 3].map(round => (
+                      <TouchableOpacity
+                        key={round}
+                        style={[
+                          styles.typeButton,
+                          maintenanceRound === round &&
+                            styles.selectedTypeButton,
+                        ]}
+                        onPress={() => handleSelectMaintenanceRound(round)}
+                      >
+                        <Text
+                          style={[
+                            styles.typeButtonText,
+                            maintenanceRound === round &&
+                              styles.selectedTypeButtonText,
+                          ]}
+                        >
+                          Lần {round}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {/* ================= CHECKLIST BẢO TRÌ ================= */}
+
+              {serviceType === 'maintenance' && maintenanceRound !== null && (
+                <>
+                  <Text style={styles.inputLabel}>Checklist bảo trì</Text>
 
                   {loadingChecklists ? (
                     <View style={styles.checklistLoading}>
-                      <ActivityIndicator
-                        size="small"
-                        color="#135FC4"
-                      />
+                      <ActivityIndicator size="small" color="#135FC4" />
 
                       <Text style={styles.checklistLoadingText}>
                         Đang tải checklist...
@@ -774,271 +656,222 @@ if (serviceType === 'maintenance') {
                     </View>
                   ) : (
                     <View style={styles.checklistContainer}>
+                      {maintenanceChecklists.map(item => (
+                        <View key={item.id} style={styles.checklistItem}>
+                          {/* MÃ CHECKLIST */}
 
-                      {maintenanceChecklists.map(
-                        item => (
-                          <View
-                            key={item.id}
-                            style={styles.checklistItem}>
+                          <Text style={styles.checklistCode}>{item.code}</Text>
 
-                            {/* MÃ CHECKLIST */}
+                          {/* NỘI DUNG */}
 
-                            <Text style={styles.checklistCode}>
-                              {item.code}
-                            </Text>
+                          <Text style={styles.checklistContent}>
+                            {item.content}
+                          </Text>
 
-                            {/* NỘI DUNG */}
+                          {/* ================= KẾT QUẢ ================= */}
 
-                            <Text
-                              style={styles.checklistContent}>
-                              {item.content}
-                            </Text>
+                          <View style={styles.resultRow}>
+                            {/* ĐẠT */}
 
-                            {/* ================= KẾT QUẢ ================= */}
-
-                            <View style={styles.resultRow}>
-
-                              {/* ĐẠT */}
-
-                              <TouchableOpacity
+                            <TouchableOpacity
+                              style={[
+                                styles.resultButton,
+                                checklistResults[item.id] === 'pass' &&
+                                  styles.passButtonSelected,
+                              ]}
+                              onPress={() => {
+                                setChecklistResults(prev => ({
+                                  ...prev,
+                                  [item.id]: 'pass',
+                                }));
+                              }}
+                            >
+                              <Text
                                 style={[
-                                  styles.resultButton,
-                                  checklistResults[item.id] ===
-                                    'pass' &&
-                                    styles.passButtonSelected,
+                                  styles.resultButtonText,
+                                  checklistResults[item.id] === 'pass' &&
+                                    styles.resultButtonTextSelected,
                                 ]}
-                                onPress={() => {
-                                  setChecklistResults(prev => ({
-                                    ...prev,
-                                    [item.id]: 'pass',
-                                  }));
-                                }}>
-                                <Text
-                                  style={[
-                                    styles.resultButtonText,
-                                    checklistResults[item.id] ===
-                                      'pass' &&
-                                      styles.resultButtonTextSelected,
-                                  ]}>
-                                  ✓ Đạt
-                                </Text>
-                              </TouchableOpacity>
+                              >
+                                ✓ Đạt
+                              </Text>
+                            </TouchableOpacity>
 
-                              {/* KHÔNG ĐẠT */}
+                            {/* KHÔNG ĐẠT */}
 
-                              <TouchableOpacity
+                            <TouchableOpacity
+                              style={[
+                                styles.resultButton,
+                                checklistResults[item.id] === 'fail' &&
+                                  styles.failButtonSelected,
+                              ]}
+                              onPress={() => {
+                                setChecklistResults(prev => ({
+                                  ...prev,
+                                  [item.id]: 'fail',
+                                }));
+                              }}
+                            >
+                              <Text
                                 style={[
-                                  styles.resultButton,
-                                  checklistResults[item.id] ===
-                                    'fail' &&
-                                    styles.failButtonSelected,
+                                  styles.resultButtonText,
+                                  checklistResults[item.id] === 'fail' &&
+                                    styles.resultButtonTextSelected,
                                 ]}
-                                onPress={() => {
-                                  setChecklistResults(prev => ({
-                                    ...prev,
-                                    [item.id]: 'fail',
-                                  }));
-                                }}>
-                                <Text
-                                  style={[
-                                    styles.resultButtonText,
-                                    checklistResults[item.id] ===
-                                      'fail' &&
-                                      styles.resultButtonTextSelected,
-                                  ]}>
-                                  ✕ Không đạt
-                                </Text>
-                              </TouchableOpacity>
-
-                            </View>
-
+                              >
+                                ✕ Không đạt
+                              </Text>
+                            </TouchableOpacity>
                           </View>
-                        ),
-                      )}
-
+                        </View>
+                      ))}
                     </View>
                   )}
                 </>
               )}
 
-            {/* ================= NGÀY THỰC HIỆN ================= */}
+              {/* ================= NGÀY THỰC HIỆN ================= */}
 
-            <Text style={styles.inputLabel}>
-              Ngày thực hiện
-            </Text>
+              <Text style={styles.inputLabel}>Ngày thực hiện</Text>
 
-            <DatePickerField
-              style={styles.input}
-              value={serviceDate}
-              onChangeText={setServiceDate}
-            />
+              <DatePickerField
+                style={styles.input}
+                value={serviceDate}
+                onChangeText={setServiceDate}
+              />
 
-            {/* ================= NỘI DUNG DỊCH VỤ ================= */}
+              {/* ================= NỘI DUNG DỊCH VỤ ================= */}
 
-            <Text style={styles.inputLabel}>
-              Nội dung dịch vụ
-            </Text>
+              <Text style={styles.inputLabel}>Nội dung dịch vụ</Text>
 
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Nhập nội dung bảo trì, sửa chữa..."
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              textAlignVertical="top"
-            />
-            <TouchableOpacity
-              style={styles.attachmentButton}
-              onPress={handlePickFiles}
->
-            <Text style={styles.attachmentButtonText}>
-              📎 Thêm ảnh / video / file
-            </Text>
-            </TouchableOpacity>
-
-            {/* ================= NÚT LƯU ================= */}
-
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleAddService}
-              disabled={saving}>
-
-              {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.saveButtonText}>
-                  Lưu dịch vụ
-                </Text>
-              )}
-
-            </TouchableOpacity>
-
-          </View>
-        )}
-
-        {/* ================= LOADING ================= */}
-
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator
-              size="large"
-              color="#135FC4"
-            />
-
-            <Text style={styles.loadingText}>
-              Đang tải dữ liệu...
-            </Text>
-          </View>
-        ) : services.length === 0 ? (
-
-          /* ================= EMPTY ================= */
-
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>
-              Chưa có lịch sử dịch vụ
-            </Text>
-
-            <Text style={styles.emptyText}>
-              Thang máy hiện chưa có lịch sử bảo trì hoặc sửa chữa.
-            </Text>
-          </View>
-
-        ) : (
-
-          /* ================= SERVICE LIST ================= */
-
-          <View style={styles.list}>
-
-            {services.map((service, index) => (
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Nhập nội dung bảo trì, sửa chữa..."
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                textAlignVertical="top"
+              />
               <TouchableOpacity
-                key={service.id}
-                style={styles.card}
-                activeOpacity={0.85}
-                onPress={() => {
-                  if (!elevatorId) {
-                    Alert.alert('Lỗi', 'Không xác định được thang máy.');
-                   return;
-                  }
-                  if (service.type === 'maintenance') {
-                    navigation.navigate('ServiceDetail', {
-                     elevatorId,
-                     serviceId: service.id,
-                   });
-                   } else if (service.type === 'repair') {
-                      navigation.navigate('RepairDetail', {
-                       elevatorId,
-                       serviceId: service.id,
-                   });
-                    } else if (service.type === 'replacement') {
-                      
-                      navigation.navigate('ReplacementDetail', {
-                       elevatorId,
-                       serviceId: service.id,
-                    });
-                    }
-                  }}> 
-                {/* CARD HEADER */}
-
-                <View style={styles.cardHeader}>
-
-                  <View style={styles.numberBox}>
-                    <Text style={styles.number}>
-                      {index + 1}
-                    </Text>
-                  </View>
-
-                  <View style={styles.cardHeaderContent}>
-
-                    <Text style={styles.cardTitle}>
-                      {getServiceType(service.type)}
-                    </Text>
-
-                    <Text style={styles.date}>
-                      {service.date}
-                    </Text>
-
-                  </View>
-
-                </View>
-
-                <View style={styles.separator} />
-
-                {/* TECHNICIAN */}
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>
-                    Kỹ thuật viên
-                  </Text>
-
-                  <Text style={styles.value}>
-                    {service.technicianId ||
-                      'Chưa cập nhật'}
-                  </Text>
-                </View>
-
-                {/* DESCRIPTION */}
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.label}>
-                    Nội dung dịch vụ
-                  </Text>
-
-                  <Text style={styles.description}>
-                    {service.description ||
-                      'Không có mô tả'}
-                  </Text>
-                </View>
-
+                style={styles.attachmentButton}
+                onPress={handlePickFiles}
+              >
+                <Text style={styles.attachmentButtonText}>
+                  📎 Thêm ảnh / video / file
+                </Text>
               </TouchableOpacity>
-            ))}
 
-          </View>
-        )}
+              {/* ================= NÚT LƯU ================= */}
 
-      </ScrollView>
-    </SafeAreaView>
-  </ImageBackground>
-);
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleAddService}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Lưu dịch vụ</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ================= LOADING ================= */}
+
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator size="large" color="#135FC4" />
+
+              <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+            </View>
+          ) : services.length === 0 ? (
+            /* ================= EMPTY ================= */
+
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Chưa có lịch sử dịch vụ</Text>
+
+              <Text style={styles.emptyText}>
+                Thang máy hiện chưa có lịch sử bảo trì hoặc sửa chữa.
+              </Text>
+            </View>
+          ) : (
+            /* ================= SERVICE LIST ================= */
+
+            <View style={styles.list}>
+              {services.map((service, index) => (
+                <TouchableOpacity
+                  key={service.id}
+                  style={styles.card}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    if (!elevatorId) {
+                      Alert.alert('Lỗi', 'Không xác định được thang máy.');
+                      return;
+                    }
+                    if (service.type === 'maintenance') {
+                      navigation.navigate('ServiceDetail', {
+                        elevatorId,
+                        serviceId: service.id,
+                      });
+                    } else if (service.type === 'repair') {
+                      navigation.navigate('RepairDetail', {
+                        elevatorId,
+                        serviceId: service.id,
+                      });
+                    } else if (service.type === 'replacement') {
+                      navigation.navigate('ReplacementDetail', {
+                        elevatorId,
+                        serviceId: service.id,
+                      });
+                    }
+                  }}
+                >
+                  {/* CARD HEADER */}
+
+                  <View style={styles.cardHeader}>
+                    <View style={styles.numberBox}>
+                      <Text style={styles.number}>{index + 1}</Text>
+                    </View>
+
+                    <View style={styles.cardHeaderContent}>
+                      <Text style={styles.cardTitle}>
+                        {getServiceType(service.type)}
+                      </Text>
+
+                      <Text style={styles.date}>{service.date}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.separator} />
+
+                  {/* TECHNICIAN */}
+
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Kỹ thuật viên</Text>
+
+                    <Text style={styles.value}>
+                      {service.technicianId || 'Chưa cập nhật'}
+                    </Text>
+                  </View>
+
+                  {/* DESCRIPTION */}
+
+                  <View style={styles.infoBlock}>
+                    <Text style={styles.label}>Nội dung dịch vụ</Text>
+
+                    <Text style={styles.description}>
+                      {service.description || 'Không có mô tả'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
+  );
 };
 const styles = StyleSheet.create({
   /* ================= BACKGROUND ================= */
@@ -1418,18 +1251,18 @@ const styles = StyleSheet.create({
   },
 
   attachmentButton: {
-  marginTop: 12,
-  paddingVertical: 12,
-  borderRadius: 8,
-  borderWidth: 1,
-  borderColor: '#999',
-  alignItems: 'center',
-},
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#999',
+    alignItems: 'center',
+  },
 
   attachmentButtonText: {
-  fontSize: 15,
-  fontWeight: '600',
-},
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });
 
 export default ServiceHistory;

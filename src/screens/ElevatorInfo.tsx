@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -10,11 +10,12 @@ import {
   Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigation';
+import { API_URL } from '../config/firebase';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/AppNavigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ElevatorInfo'>;
-const ElevatorInfo = ({route}: Props) => {
+const ElevatorInfo = ({ route }: Props) => {
   const selectedElevatorId = route.params?.elevatorId;
   const [elevator, setElevator] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -25,22 +26,16 @@ const ElevatorInfo = ({route}: Props) => {
         const token = await AsyncStorage.getItem('token');
 
         if (!token) {
-          Alert.alert(
-            'Lỗi',
-            'Không tìm thấy thông tin đăng nhập.',
-          );
+          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
           return;
         }
 
-        const response = await fetch(
-          'http://127.0.0.1:3000/elevators',
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+        const response = await fetch(`${API_URL}/elevators`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
 
         const data = await response.json();
 
@@ -53,26 +48,20 @@ const ElevatorInfo = ({route}: Props) => {
         }
 
         const selected = selectedElevatorId
-          ? data.find((item: {elevatorId: string}) => item.elevatorId === selectedElevatorId)
+          ? data.find(
+              (item: { elevatorId: string }) =>
+                item.elevatorId === selectedElevatorId,
+            )
           : data[0];
         if (selected) {
           setElevator(selected);
         } else {
-          Alert.alert(
-            'Thông báo',
-            'Không tìm thấy thang máy được phân quyền.',
-          );
+          Alert.alert('Thông báo', 'Không tìm thấy thang máy được phân quyền.');
         }
       } catch (error) {
-        console.error(
-          'Lỗi lấy thông tin thang máy:',
-          error,
-        );
+        console.error('Lỗi lấy thông tin thang máy:', error);
 
-        Alert.alert(
-          'Lỗi kết nối',
-          'Không thể kết nối tới Backend.',
-        );
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
       } finally {
         setLoading(false);
       }
@@ -85,162 +74,113 @@ const ElevatorInfo = ({route}: Props) => {
     <ImageBackground
       source={require('../../assets/background.jpg')}
       style={styles.background}
-      resizeMode="cover">
-
+      resizeMode="cover"
+    >
       <SafeAreaView style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}>
-
+          showsVerticalScrollIndicator={false}
+        >
           {/* Tiêu đề */}
           <View style={styles.header}>
-            <Text style={styles.title}>
-              Thông tin chung
-            </Text>
+            <Text style={styles.title}>Thông tin chung</Text>
 
-            <Text style={styles.subtitle}>
-              Thông tin cơ bản của thang máy
-            </Text>
+            <Text style={styles.subtitle}>Thông tin cơ bản của thang máy</Text>
           </View>
 
           {loading ? (
             <View style={styles.loading}>
-              <ActivityIndicator
-                size="large"
-                color="#135FC4"
-              />
+              <ActivityIndicator size="large" color="#135FC4" />
 
-              <Text style={styles.loadingText}>
-                Đang tải dữ liệu...
-              </Text>
+              <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
             </View>
           ) : elevator ? (
             <View style={styles.card}>
-
               {/* Mã thang máy */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Mã thang máy
-                </Text>
+                <Text style={styles.label}>Mã thang máy</Text>
 
-                <Text style={styles.value}>
-                  {elevator.elevatorId}
-                </Text>
+                <Text style={styles.value}>{elevator.elevatorId}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Chủ sở hữu */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Chủ sở hữu
-                </Text>
+                <Text style={styles.label}>Chủ sở hữu</Text>
 
-                <Text style={styles.value}>
-                  {elevator.owner}
-                </Text>
+                <Text style={styles.value}>{elevator.owner}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Vị trí */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Vị trí
-                </Text>
+                <Text style={styles.label}>Vị trí</Text>
 
-                <Text style={styles.value}>
-                  {elevator.location}
-                </Text>
+                <Text style={styles.value}>{elevator.location}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Thành phố */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Thành phố
-                </Text>
+                <Text style={styles.label}>Thành phố</Text>
 
-                <Text style={styles.value}>
-                  {elevator.city}
-                </Text>
+                <Text style={styles.value}>{elevator.city}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Nhà sản xuất */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Nhà sản xuất
-                </Text>
+                <Text style={styles.label}>Nhà sản xuất</Text>
 
-                <Text style={styles.value}>
-                  {elevator.manufacturer}
-                </Text>
+                <Text style={styles.value}>{elevator.manufacturer}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Ngày lắp đặt */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Ngày lắp đặt
-                </Text>
+                <Text style={styles.label}>Ngày lắp đặt</Text>
 
-                <Text style={styles.value}>
-                  {elevator.installationDate}
-                </Text>
+                <Text style={styles.value}>{elevator.installationDate}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Loại */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Loại thang
-                </Text>
+                <Text style={styles.label}>Loại thang</Text>
 
-                <Text style={styles.value}>
-                  {elevator.type}
-                </Text>
+                <Text style={styles.value}>{elevator.type}</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Sức chứa */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Sức chứa
-                </Text>
+                <Text style={styles.label}>Sức chứa</Text>
 
-                <Text style={styles.value}>
-                  {elevator.capacity} kg
-                </Text>
+                <Text style={styles.value}>{elevator.capacity} kg</Text>
               </View>
 
               <View style={styles.separator} />
 
               {/* Trạng thái */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Trạng thái
-                </Text>
+                <Text style={styles.label}>Trạng thái</Text>
 
-                <Text style={styles.status}>
-                  {elevator.status}
-                </Text>
+                <Text style={styles.status}>{elevator.status}</Text>
               </View>
-
             </View>
           ) : null}
-
         </ScrollView>
       </SafeAreaView>
     </ImageBackground>
   );
 };
-
 
 const styles = StyleSheet.create({
   background: {

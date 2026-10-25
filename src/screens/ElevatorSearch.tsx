@@ -1,8 +1,9 @@
-import React, {useState} from 'react';
-import {useNavigation} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigation';
+import React, { useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/AppNavigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config/firebase';
 import LogoutButton from '../navigation/LogoutButton';
 import {
   ActivityIndicator,
@@ -28,7 +29,7 @@ type Elevator = {
 
 const ElevatorSearch = () => {
   const navigation =
-  useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<Elevator[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,15 +52,12 @@ const ElevatorSearch = () => {
 
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(
-        'http://127.0.0.1:3000/elevators',
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`${API_URL}/elevators`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       const data = await response.json();
 
@@ -113,9 +111,7 @@ const ElevatorSearch = () => {
 
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>
-                Elevator Management
-              </Text>
+              <Text style={styles.title}>Elevator Management</Text>
 
               <Text style={styles.subtitle}>
                 Tra cứu nhanh thông tin thang máy
@@ -124,14 +120,10 @@ const ElevatorSearch = () => {
 
             {/* Search */}
             <View style={styles.searchSection}>
-              <Text style={styles.sectionTitle}>
-                NHẬP THÔNG TIN TRA CỨU
-              </Text>
+              <Text style={styles.sectionTitle}>NHẬP THÔNG TIN TRA CỨU</Text>
 
               <View style={styles.searchInputContainer}>
-                <Text style={styles.searchIcon}>
-                  🔍
-                </Text>
+                <Text style={styles.searchIcon}>🔍</Text>
 
                 <TextInput
                   style={styles.searchInput}
@@ -155,13 +147,9 @@ const ElevatorSearch = () => {
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <>
-                    <Text style={styles.searchButtonIcon}>
-                      🔍
-                    </Text>
+                    <Text style={styles.searchButtonIcon}>🔍</Text>
 
-                    <Text style={styles.searchButtonText}>
-                      TRA CỨU
-                    </Text>
+                    <Text style={styles.searchButtonText}>TRA CỨU</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -170,10 +158,7 @@ const ElevatorSearch = () => {
             {/* Results */}
             {hasSearched && !loading && (
               <View style={styles.resultSection}>
-
-                <Text style={styles.resultTitle}>
-                  Kết quả tra cứu
-                </Text>
+                <Text style={styles.resultTitle}>Kết quả tra cứu</Text>
 
                 {results.length === 0 ? (
                   <View style={styles.emptyContainer}>
@@ -188,21 +173,19 @@ const ElevatorSearch = () => {
                 ) : (
                   results.map(elevator => (
                     <TouchableOpacity
-                       key={elevator.elevatorId}
-                       style={styles.resultCard}
-                       activeOpacity={0.8}
-                       onPress={() => {
+                      key={elevator.elevatorId}
+                      style={styles.resultCard}
+                      activeOpacity={0.8}
+                      onPress={() => {
                         navigation.navigate('TechnicianElevatorMenu', {
-                        elevatorId: elevator.elevatorId,
-                        owner: elevator.owner,
-                        location: `${elevator.location}, ${elevator.city}`,
+                          elevatorId: elevator.elevatorId,
+                          owner: elevator.owner,
+                          location: `${elevator.location}, ${elevator.city}`,
                         });
-                    }}
+                      }}
                     >
                       <View style={styles.resultIconBox}>
-                        <Text style={styles.resultIcon}>
-                          ⇅
-                        </Text>
+                        <Text style={styles.resultIcon}>⇅</Text>
                       </View>
 
                       <View style={styles.resultContent}>
@@ -223,16 +206,12 @@ const ElevatorSearch = () => {
                         </Text>
                       </View>
 
-                      <Text style={styles.arrow}>
-                        ›
-                      </Text>
+                      <Text style={styles.arrow}>›</Text>
                     </TouchableOpacity>
                   ))
                 )}
-
               </View>
             )}
-
           </ScrollView>
         </SafeAreaView>
       </View>

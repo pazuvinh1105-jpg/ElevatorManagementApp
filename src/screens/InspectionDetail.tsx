@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import { API_URL } from '../config/firebase';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 type RootStackParamList = {
   InspectionDetail: {
@@ -18,10 +19,7 @@ type RootStackParamList = {
   };
 };
 
-type Props = NativeStackScreenProps<
-  RootStackParamList,
-  'InspectionDetail'
->;
+type Props = NativeStackScreenProps<RootStackParamList, 'InspectionDetail'>;
 
 type Inspection = {
   id: number;
@@ -41,8 +39,8 @@ type Attachment = {
   createdAt?: string;
 };
 
-const InspectionDetail = ({route}: Props) => {
-  const {elevatorId, inspectionId} = route.params;
+const InspectionDetail = ({ route }: Props) => {
+  const { elevatorId, inspectionId } = route.params;
 
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -61,7 +59,7 @@ const InspectionDetail = ({route}: Props) => {
 
       // Lấy danh sách kiểm định
       const inspectionResponse = await fetch(
-        `http://127.0.0.1:3000/elevators/${elevatorId}/inspections`,
+        `${API_URL}/elevators/${elevatorId}/inspections`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -88,7 +86,7 @@ const InspectionDetail = ({route}: Props) => {
 
       // Lấy attachment của inspection
       const attachmentResponse = await fetch(
-        `http://127.0.0.1:3000/attachments?recordType=inspection&recordId=${inspectionId}`,
+        `${API_URL}/attachments?recordType=inspection&recordId=${inspectionId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -163,26 +161,18 @@ const InspectionDetail = ({route}: Props) => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Chi tiết kiểm định</Text>
-        <Text style={styles.elevator}>
-          Thang máy: {inspection.elevatorId}
-        </Text>
+        <Text style={styles.elevator}>Thang máy: {inspection.elevatorId}</Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.label}>Ngày kiểm định</Text>
-        <Text style={styles.value}>
-          {inspection.inspectionDate || '—'}
-        </Text>
+        <Text style={styles.value}>{inspection.inspectionDate || '—'}</Text>
 
         <Text style={styles.label}>Đơn vị kiểm định</Text>
-        <Text style={styles.value}>
-          {inspection.inspectionUnit || '—'}
-        </Text>
+        <Text style={styles.value}>{inspection.inspectionUnit || '—'}</Text>
 
         <Text style={styles.label}>Kết quả</Text>
-        <Text style={styles.value}>
-          {inspection.result || '—'}
-        </Text>
+        <Text style={styles.value}>{inspection.result || '—'}</Text>
 
         <Text style={styles.label}>Mô tả</Text>
         <Text style={styles.description}>
@@ -197,9 +187,7 @@ const InspectionDetail = ({route}: Props) => {
 
         {attachments.length === 0 ? (
           <View style={styles.emptyAttachment}>
-            <Text style={styles.emptyText}>
-              Không có tệp đính kèm
-            </Text>
+            <Text style={styles.emptyText}>Không có tệp đính kèm</Text>
           </View>
         ) : (
           attachments.map(file => (
@@ -211,10 +199,9 @@ const InspectionDetail = ({route}: Props) => {
                   'Tệp đính kèm',
                   `${file.fileName}\n\nURI:\n${file.fileUri}`,
                 );
-              }}>
-              <Text style={styles.fileIcon}>
-                {getFileIcon(file.fileType)}
-              </Text>
+              }}
+            >
+              <Text style={styles.fileIcon}>{getFileIcon(file.fileType)}</Text>
 
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={2}>
@@ -223,9 +210,7 @@ const InspectionDetail = ({route}: Props) => {
 
                 <Text style={styles.fileMeta}>
                   {file.fileType.toUpperCase()}
-                  {file.fileSize
-                    ? ` • ${formatFileSize(file.fileSize)}`
-                    : ''}
+                  {file.fileSize ? ` • ${formatFileSize(file.fileSize)}` : ''}
                 </Text>
               </View>
             </TouchableOpacity>

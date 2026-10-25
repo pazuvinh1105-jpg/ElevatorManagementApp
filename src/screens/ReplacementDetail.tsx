@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,15 +11,15 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {pick, types} from '@react-native-documents/picker';
+import { API_URL } from '../config/firebase';
+import { pick, types } from '@react-native-documents/picker';
 
-const ReplacementDetail = ({route}: any) => {
-  const {elevatorId, serviceId} = route.params;
-   
+const ReplacementDetail = ({ route }: any) => {
+  const { elevatorId, serviceId } = route.params;
 
   console.log('REPLACEMENT DETAIL PARAMS:', {
-   elevatorId,
-   serviceId,
+    elevatorId,
+    serviceId,
   });
 
   const [service, setService] = useState<any>(null);
@@ -47,7 +47,7 @@ const ReplacementDetail = ({route}: any) => {
       // Lấy chi tiết thay thế
       // ================================
       const response = await fetch(
-        `http://127.0.0.1:3000/elevators/${elevatorId}/services/${serviceId}`,
+        `${API_URL}/elevators/${elevatorId}/services/${serviceId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -56,11 +56,9 @@ const ReplacementDetail = ({route}: any) => {
       );
 
       const data = await response.json();
-    
+
       if (!response.ok) {
-        throw new Error(
-          data.message || 'Không thể lấy thông tin thay thế',
-        );
+        throw new Error(data.message || 'Không thể lấy thông tin thay thế');
       }
 
       setService(data.service);
@@ -69,7 +67,7 @@ const ReplacementDetail = ({route}: any) => {
       // Lấy file đính kèm
       // ================================
       const attachmentResponse = await fetch(
-        `http://127.0.0.1:3000/attachments?recordType=replacement&recordId=${serviceId}`,
+        `${API_URL}/attachments?recordType=replacement&recordId=${serviceId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -78,72 +76,61 @@ const ReplacementDetail = ({route}: any) => {
       );
 
       const attachmentData = await attachmentResponse.json();
-      
+
       if (attachmentResponse.ok) {
-        setAttachments(
-          Array.isArray(attachmentData)
-         ? attachmentData
-          : [],
-        );
+        setAttachments(Array.isArray(attachmentData) ? attachmentData : []);
       }
     } catch (error: any) {
       console.error('Lỗi lấy chi tiết thay thế:', error);
 
-      Alert.alert(
-        'Lỗi',
-        error.message || 'Không thể tải thông tin thay thế',
-      );
+      Alert.alert('Lỗi', error.message || 'Không thể tải thông tin thay thế');
     } finally {
       setLoading(false);
     }
   };
-const startEditing = () => {
-  setEditDate(service.date || '');
-  setEditDescription(service.description || '');
-  setIsEditing(true);
-};
+  const startEditing = () => {
+    setEditDate(service.date || '');
+    setEditDescription(service.description || '');
+    setIsEditing(true);
+  };
 
-const saveChanges = async () => {
-  try {
-    const token = await AsyncStorage.getItem('token');
+  const saveChanges = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
 
-    // 1. Cập nhật ngày và nội dung thay thế
-    const response = await fetch(
-      `http://127.0.0.1:3000/elevators/${elevatorId}/services/${serviceId}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      // 1. Cập nhật ngày và nội dung thay thế
+      const response = await fetch(
+        `${API_URL}/elevators/${elevatorId}/services/${serviceId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            date: editDate,
+            description: editDescription,
+          }),
         },
-        body: JSON.stringify({
-          date: editDate,
-          description: editDescription,
-        }),
-      },
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.message || 'Không thể cập nhật bản ghi',
       );
-    }
 
-    // 2. Lưu các file mới
-    for (const file of selectedFiles) {
-      let fileType = 'document';
+      const data = await response.json();
 
-      if (file.type?.startsWith('image/')) {
-        fileType = 'image';
-      } else if (file.type?.startsWith('video/')) {
-        fileType = 'video';
+      if (!response.ok) {
+        throw new Error(data.message || 'Không thể cập nhật bản ghi');
       }
 
-      const attachmentResponse = await fetch(
-        'http://127.0.0.1:3000/attachments',
-        {
+      // 2. Lưu các file mới
+      for (const file of selectedFiles) {
+        let fileType = 'document';
+
+        if (file.type?.startsWith('image/')) {
+          fileType = 'image';
+        } else if (file.type?.startsWith('video/')) {
+          fileType = 'video';
+        }
+
+        const attachmentResponse = await fetch(`${API_URL}/attachments`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -157,90 +144,69 @@ const saveChanges = async () => {
             fileType: fileType,
             fileSize: file.size || null,
           }),
-        },
-      );
+        });
 
-      const attachmentData = await attachmentResponse.json();
+        const attachmentData = await attachmentResponse.json();
 
-      if (!attachmentResponse.ok) {
-        throw new Error(
-          attachmentData.message ||
-            'Không thể lưu file đính kèm',
-        );
+        if (!attachmentResponse.ok) {
+          throw new Error(
+            attachmentData.message || 'Không thể lưu file đính kèm',
+          );
+        }
       }
-    }
 
-    // 3. Xóa các file cũ đã được đánh dấu xóa
-    for (const fileId of filesToDelete) {
-      const deleteResponse = await fetch(
-        `http://127.0.0.1:3000/attachments/${fileId}`,
-        {
+      // 3. Xóa các file cũ đã được đánh dấu xóa
+      for (const fileId of filesToDelete) {
+        const deleteResponse = await fetch(`${API_URL}/attachments/${fileId}`, {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        },
-      );
+        });
 
-      const deleteData = await deleteResponse.json();
+        const deleteData = await deleteResponse.json();
 
-      if (!deleteResponse.ok) {
-        throw new Error(
-          deleteData.message ||
-            'Không thể xóa file đính kèm',
-        );
+        if (!deleteResponse.ok) {
+          throw new Error(deleteData.message || 'Không thể xóa file đính kèm');
+        }
       }
+
+      // 4. Reset trạng thái
+      setSelectedFiles([]);
+      setFilesToDelete([]);
+      setIsEditing(false);
+
+      // 5. Tải lại dữ liệu
+      await loadDetail();
+
+      Alert.alert('Thành công', 'Đã cập nhật bản ghi thay thế');
+    } catch (error: any) {
+      console.error('Lỗi cập nhật thay thế:', error);
+
+      Alert.alert('Lỗi', error.message || 'Không thể cập nhật bản ghi');
     }
+  };
 
-    // 4. Reset trạng thái
-    setSelectedFiles([]);
-    setFilesToDelete([]);
-    setIsEditing(false);
+  const pickFiles = async () => {
+    try {
+      const result = await pick({
+        allowMultiSelection: true,
+        type: [types.images, types.video, types.allFiles],
+      });
 
-    // 5. Tải lại dữ liệu
-    await loadDetail();
+      setSelectedFiles(prev => [...prev, ...result]);
+    } catch (error) {
+      console.log('Chọn file bị hủy hoặc lỗi:', error);
+    }
+  };
 
-    Alert.alert(
-      'Thành công',
-      'Đã cập nhật bản ghi thay thế',
+  const markFileForDelete = (fileId: number) => {
+    setFilesToDelete(prev =>
+      prev.includes(fileId) ? prev : [...prev, fileId],
     );
-  } catch (error: any) {
-    console.error('Lỗi cập nhật thay thế:', error);
 
-    Alert.alert(
-      'Lỗi',
-      error.message || 'Không thể cập nhật bản ghi',
-    );
-  }
-};
-
-const pickFiles = async () => {
-  try {
-    const result = await pick({
-      allowMultiSelection: true,
-      type: [types.images, types.video, types.allFiles],
-    });
-
-    setSelectedFiles(prev => [
-      ...prev,
-      ...result,
-    ]);
-  } catch (error) {
-    console.log('Chọn file bị hủy hoặc lỗi:', error);
-  }
-};
-
-const markFileForDelete = (fileId: number) => {
-  setFilesToDelete(prev =>
-    prev.includes(fileId)
-      ? prev
-      : [...prev, fileId],
-  );
-
-  setAttachments(prev =>
-    prev.filter(file => file.id !== fileId),
-  );
-};
+    setAttachments(prev => prev.filter(file => file.id !== fileId));
+  };
   const getFileIcon = (fileType: string) => {
     if (fileType === 'image') {
       return '🖼️';
@@ -280,223 +246,179 @@ const markFileForDelete = (fileId: number) => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>
-            Không tìm thấy bản ghi thay thế
-          </Text>
+          <Text style={styles.errorText}>Không tìm thấy bản ghi thay thế</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-  <View style={styles.background}>
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+    <View style={styles.background}>
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Tiêu đề */}
+          <View style={styles.headerCard}>
+            <Text style={styles.title}>Chi tiết thay thế thiết bị</Text>
 
-        {/* Tiêu đề */}
-        <View style={styles.headerCard}>
-          <Text style={styles.title}>
-            Chi tiết thay thế thiết bị
-          </Text>
+            <Text style={styles.subtitle}>Mã bản ghi: #{service.id}</Text>
 
-          <Text style={styles.subtitle}>
-            Mã bản ghi: #{service.id}
-          </Text>
-
-          {!isEditing ? (
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={startEditing}>
-              <Text style={styles.buttonText}>
-                ✏️ Chỉnh sửa
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.buttonRow}>
+            {!isEditing ? (
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setIsEditing(false);
-                  setSelectedFiles([]);
-                  setFilesToDelete([]);
-                  loadDetail();
-                }}>
-                <Text style={styles.buttonText}>
-                  Hủy
-                </Text>
+                style={styles.editButton}
+                onPress={startEditing}
+              >
+                <Text style={styles.buttonText}>✏️ Chỉnh sửa</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={saveChanges}>
-                <Text style={styles.buttonText}>
-                  💾 Lưu
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Thông tin thay thế */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>
-            🔄 Thông tin thay thế
-          </Text>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>
-              Thang máy
-            </Text>
-
-            <Text style={styles.value}>
-              {service.elevatorId}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>
-              Ngày thay thế
-            </Text>
-
-            {isEditing ? (
-              <TextInput
-                style={styles.editInput}
-                value={editDate}
-                onChangeText={setEditDate}
-                placeholder="Nhập ngày thay thế"
-              />
             ) : (
-              <Text style={styles.value}>
-                {service.date}
-              </Text>
-            )}
-          </View>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setIsEditing(false);
+                    setSelectedFiles([]);
+                    setFilesToDelete([]);
+                    loadDetail();
+                  }}
+                >
+                  <Text style={styles.buttonText}>Hủy</Text>
+                </TouchableOpacity>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>
-              Kỹ thuật viên
-            </Text>
-
-            <Text style={styles.value}>
-              {service.technicianId || '---'}
-            </Text>
-          </View>
-
-          <View style={styles.descriptionContainer}>
-            <Text style={styles.label}>
-              Nội dung thay thế
-            </Text>
-
-            {isEditing ? (
-              <TextInput
-                style={styles.descriptionInput}
-                value={editDescription}
-                onChangeText={setEditDescription}
-                placeholder="Nhập nội dung thay thế"
-                multiline
-                textAlignVertical="top"
-              />
-            ) : (
-              <Text style={styles.description}>
-                {service.description || 'Không có mô tả'}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* File đính kèm */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>
-            📎 File đính kèm
-          </Text>
-
-          {/* Nút thêm file khi chỉnh sửa */}
-          {isEditing && (
-            <TouchableOpacity
-              style={styles.addFileButton}
-              onPress={pickFiles}>
-              <Text style={styles.addFileText}>
-                ＋ Thêm file
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* File cũ */}
-          {attachments.length === 0 ? (
-            <Text style={styles.emptyText}>
-              Không có file đính kèm
-            </Text>
-          ) : (
-            attachments.map(file => (
-              <View
-                key={file.id}
-                style={styles.attachmentItem}>
-
-                <Text style={styles.attachmentIcon}>
-                  {getFileIcon(file.fileType)}
-                </Text>
-
-                <View style={styles.attachmentInfo}>
-                  <Text
-                    style={styles.attachmentName}
-                    numberOfLines={2}>
-                    {file.fileName}
-                  </Text>
-
-                  <Text style={styles.attachmentMeta}>
-                    {file.fileType.toUpperCase()}
-                    {file.fileSize
-                      ? ` • ${formatFileSize(file.fileSize)}`
-                      : ''}
-                  </Text>
-                </View>
-
-                {/* Nút xóa file khi chỉnh sửa */}
-                {isEditing && (
-                  <TouchableOpacity
-                    style={styles.deleteFileButton}
-                    onPress={() =>
-                      markFileForDelete(file.id)
-                    }>
-                    <Text style={styles.deleteFileText}>
-                      Xóa
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={saveChanges}
+                >
+                  <Text style={styles.buttonText}>💾 Lưu</Text>
+                </TouchableOpacity>
               </View>
-            ))
-          )}
+            )}
+          </View>
 
-          {/* File mới được chọn */}
-          {isEditing && selectedFiles.length > 0 && (
-            <View style={styles.selectedFilesContainer}>
-              <Text style={styles.selectedFilesTitle}>
-                File mới:
-              </Text>
+          {/* Thông tin thay thế */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🔄 Thông tin thay thế</Text>
 
-              {selectedFiles.map((file, index) => (
-                <View
-                  key={`${file.uri}-${index}`}
-                  style={styles.selectedFileItem}>
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Thang máy</Text>
 
-                  <Text
-                    style={styles.selectedFileName}
-                    numberOfLines={2}>
-                    📄 {file.name || 'File đính kèm'}
+              <Text style={styles.value}>{service.elevatorId}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Ngày thay thế</Text>
+
+              {isEditing ? (
+                <TextInput
+                  style={styles.editInput}
+                  value={editDate}
+                  onChangeText={setEditDate}
+                  placeholder="Nhập ngày thay thế"
+                />
+              ) : (
+                <Text style={styles.value}>{service.date}</Text>
+              )}
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Kỹ thuật viên</Text>
+
+              <Text style={styles.value}>{service.technicianId || '---'}</Text>
+            </View>
+
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.label}>Nội dung thay thế</Text>
+
+              {isEditing ? (
+                <TextInput
+                  style={styles.descriptionInput}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  placeholder="Nhập nội dung thay thế"
+                  multiline
+                  textAlignVertical="top"
+                />
+              ) : (
+                <Text style={styles.description}>
+                  {service.description || 'Không có mô tả'}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* File đính kèm */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>📎 File đính kèm</Text>
+
+            {/* Nút thêm file khi chỉnh sửa */}
+            {isEditing && (
+              <TouchableOpacity
+                style={styles.addFileButton}
+                onPress={pickFiles}
+              >
+                <Text style={styles.addFileText}>＋ Thêm file</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* File cũ */}
+            {attachments.length === 0 ? (
+              <Text style={styles.emptyText}>Không có file đính kèm</Text>
+            ) : (
+              attachments.map(file => (
+                <View key={file.id} style={styles.attachmentItem}>
+                  <Text style={styles.attachmentIcon}>
+                    {getFileIcon(file.fileType)}
                   </Text>
 
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+                  <View style={styles.attachmentInfo}>
+                    <Text style={styles.attachmentName} numberOfLines={2}>
+                      {file.fileName}
+                    </Text>
 
-      </ScrollView>
-    </SafeAreaView>
-  </View>
-);
+                    <Text style={styles.attachmentMeta}>
+                      {file.fileType.toUpperCase()}
+                      {file.fileSize
+                        ? ` • ${formatFileSize(file.fileSize)}`
+                        : ''}
+                    </Text>
+                  </View>
+
+                  {/* Nút xóa file khi chỉnh sửa */}
+                  {isEditing && (
+                    <TouchableOpacity
+                      style={styles.deleteFileButton}
+                      onPress={() => markFileForDelete(file.id)}
+                    >
+                      <Text style={styles.deleteFileText}>Xóa</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))
+            )}
+
+            {/* File mới được chọn */}
+            {isEditing && selectedFiles.length > 0 && (
+              <View style={styles.selectedFilesContainer}>
+                <Text style={styles.selectedFilesTitle}>File mới:</Text>
+
+                {selectedFiles.map((file, index) => (
+                  <View
+                    key={`${file.uri}-${index}`}
+                    style={styles.selectedFileItem}
+                  >
+                    <Text style={styles.selectedFileName} numberOfLines={2}>
+                      📄 {file.name || 'File đính kèm'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
 };
 export default ReplacementDetail;
 

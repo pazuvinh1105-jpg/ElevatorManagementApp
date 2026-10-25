@@ -1,5 +1,5 @@
-import React, {useState} from 'react';
-import {useAuth} from '../navigation/AuthContext';
+import React, { useState } from 'react';
+import { useAuth } from '../navigation/AuthContext';
 import styles from '../styles/loginStyle';
 import {
   Alert,
@@ -12,14 +12,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import {RootStackParamList} from '../navigation/AppNavigation';
+import { RootStackParamList } from '../navigation/AppNavigation';
+import { API_URL } from '../config/firebase';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const LoginScreen = ({}: Props) => {
-  const {signIn} = useAuth();
+  const { signIn } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -35,33 +36,33 @@ const LoginScreen = ({}: Props) => {
       return;
     }
     try {
-    const response = await fetch('http://127.0.0.1:3000/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        username,
-        password,
-      }),
-    });
+      const response = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      Alert.alert('Đăng nhập thất bại', data.message);
-      return;
+      if (!response.ok) {
+        Alert.alert('Đăng nhập thất bại', data.message);
+        return;
+      }
+
+      await signIn(data.token, data.user.role);
+    } catch (error) {
+      console.error(error);
+      Alert.alert(
+        'Lỗi kết nối',
+        'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend.',
+      );
     }
-
-    await signIn(data.token, data.user.role);
-  } catch (error) {
-    console.error(error);
-    Alert.alert(
-      'Lỗi kết nối',
-      'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend.',
-    );
-  }
-};
+  };
 
   return (
     <ImageBackground
@@ -77,7 +78,6 @@ const LoginScreen = ({}: Props) => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.container}>
-
               {/* Logo */}
               <Image
                 source={require('../../assets/login-logo.png')}
@@ -86,9 +86,7 @@ const LoginScreen = ({}: Props) => {
               />
 
               {/* App name */}
-              <Text style={styles.appTitle}>
-                Elevator Management App
-              </Text>
+              <Text style={styles.appTitle}>Elevator Management App</Text>
 
               <Text style={styles.appSubtitle}>
                 Quản lý thang máy thông minh
@@ -96,9 +94,7 @@ const LoginScreen = ({}: Props) => {
 
               {/* Login title */}
               <View style={styles.loginHeader}>
-                <Text style={styles.loginTitle}>
-                  Đăng nhập
-                </Text>
+                <Text style={styles.loginTitle}>Đăng nhập</Text>
 
                 <Text style={styles.welcomeText}>
                   Chào mừng bạn quay trở lại!
@@ -141,9 +137,7 @@ const LoginScreen = ({}: Props) => {
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeButton}
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showPassword ? '◉' : '◌'}
-                  </Text>
+                  <Text style={styles.eyeIcon}>{showPassword ? '◉' : '◌'}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -153,19 +147,12 @@ const LoginScreen = ({}: Props) => {
                 activeOpacity={0.8}
                 onPress={handleLogin}
               >
-                <Text style={styles.loginButtonText}>
-                  Đăng nhập
-                </Text>
+                <Text style={styles.loginButtonText}>Đăng nhập</Text>
               </TouchableOpacity>
 
               {/* Footer */}
-              <Text style={styles.footer}>
-                Vận hành an toàn
-              </Text>
-              <Text style={styles.footerSubtitle}>
-               Nâng tầm cuộc sống
-              </Text>
-
+              <Text style={styles.footer}>Vận hành an toàn</Text>
+              <Text style={styles.footerSubtitle}>Nâng tầm cuộc sống</Text>
             </View>
           </ScrollView>
         </SafeAreaView>

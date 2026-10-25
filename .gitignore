@@ -73,6 +73,10 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
-# Backend SQLite database
-backend/database/*.db
 backend/.env
+# Firebase credentials and local emulator state
+**/*service-account*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

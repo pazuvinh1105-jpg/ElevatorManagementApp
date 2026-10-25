@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,243 +10,181 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config/firebase';
 
-const TechnicalInfo = ({route}: any) => {
+const TechnicalInfo = ({ route }: any) => {
   const selectedElevatorId = route.params?.elevatorId;
   const [elevator, setElevator] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  const getElevator = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
+    const getElevator = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
 
-      if (!token) {
-        Alert.alert(
-          'Lỗi',
-          'Không tìm thấy thông tin đăng nhập.',
-        );
-        return;
-      }
+        if (!token) {
+          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+          return;
+        }
 
-      let elevatorId = selectedElevatorId;
+        let elevatorId = selectedElevatorId;
 
-      // Nếu Technician đã chọn thang máy
-      if (elevatorId) {
-        const response = await fetch(
-          'http://127.0.0.1:3000/elevators',
-          {
+        // Nếu Technician đã chọn thang máy
+        if (elevatorId) {
+          const response = await fetch(`${API_URL}/elevators`, {
             method: 'GET',
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          },
-        );
+          });
 
-        const data = await response.json();
+          const data = await response.json();
 
-        if (!response.ok) {
-          Alert.alert(
-            'Lỗi',
-            data.message ||
-              'Không lấy được thông tin thang máy.',
+          if (!response.ok) {
+            Alert.alert(
+              'Lỗi',
+              data.message || 'Không lấy được thông tin thang máy.',
+            );
+            return;
+          }
+
+          const selectedElevator = data.find(
+            (item: any) => item.elevatorId === elevatorId,
           );
-          return;
-        }
 
-        const selectedElevator = data.find(
-          (item: any) =>
-            item.elevatorId === elevatorId,
-        );
-
-        if (selectedElevator) {
-          setElevator(selectedElevator);
+          if (selectedElevator) {
+            setElevator(selectedElevator);
+          } else {
+            Alert.alert('Thông báo', 'Không tìm thấy thang máy được chọn.');
+          }
         } else {
-          Alert.alert(
-            'Thông báo',
-            'Không tìm thấy thang máy được chọn.',
-          );
-        }
-      } else {
-        // Owner: không truyền elevatorId
-        // nên lấy thang máy được phân quyền
-        const response = await fetch(
-          'http://127.0.0.1:3000/elevators',
-          {
+          // Owner: không truyền elevatorId
+          // nên lấy thang máy được phân quyền
+          const response = await fetch(`${API_URL}/elevators`, {
             method: 'GET',
             headers: {
               Authorization: `Bearer ${token}`,
             },
-          },
-        );
+          });
 
-        const data = await response.json();
+          const data = await response.json();
 
-        if (!response.ok) {
-          Alert.alert(
-            'Lỗi',
-            data.message ||
-              'Không lấy được thông tin thang máy.',
-          );
-          return;
+          if (!response.ok) {
+            Alert.alert(
+              'Lỗi',
+              data.message || 'Không lấy được thông tin thang máy.',
+            );
+            return;
+          }
+
+          if (data.length > 0) {
+            setElevator(data[0]);
+          } else {
+            Alert.alert(
+              'Thông báo',
+              'Không tìm thấy thang máy được phân quyền.',
+            );
+          }
         }
+      } catch (error) {
+        console.error('Lỗi lấy thông số kỹ thuật:', error);
 
-        if (data.length > 0) {
-          setElevator(data[0]);
-        } else {
-          Alert.alert(
-            'Thông báo',
-            'Không tìm thấy thang máy được phân quyền.',
-          );
-        }
+        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error(
-        'Lỗi lấy thông số kỹ thuật:',
-        error,
-      );
+    };
 
-      Alert.alert(
-        'Lỗi kết nối',
-        'Không thể kết nối tới Backend.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  getElevator();
-}, [selectedElevatorId]);
+    getElevator();
+  }, [selectedElevatorId]);
 
   return (
     <ImageBackground
       source={require('../../assets/background.jpg')}
       style={styles.background}
-      resizeMode="cover">
-
+      resizeMode="cover"
+    >
       <SafeAreaView style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}>
-
+          showsVerticalScrollIndicator={false}
+        >
           {/* ================= HEADER ================= */}
 
           <View style={styles.header}>
-            <Text style={styles.title}>
-              Thông số kỹ thuật
-            </Text>
+            <Text style={styles.title}>Thông số kỹ thuật</Text>
 
-            <Text style={styles.subtitle}>
-              Chi tiết kỹ thuật của thang máy
-            </Text>
+            <Text style={styles.subtitle}>Chi tiết kỹ thuật của thang máy</Text>
           </View>
-
 
           {/* ================= LOADING ================= */}
 
           {loading ? (
             <View style={styles.loading}>
-              <ActivityIndicator
-                size="large"
-                color="#135FC4"
-              />
+              <ActivityIndicator size="large" color="#135FC4" />
 
-              <Text style={styles.loadingText}>
-                Đang tải dữ liệu...
-              </Text>
+              <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
             </View>
           ) : elevator ? (
-
             /* ================= TECHNICAL CARD ================= */
 
             <View style={styles.card}>
-
               {/* Số điểm dừng */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Số điểm dừng
-                </Text>
+                <Text style={styles.label}>Số điểm dừng</Text>
 
-                <Text style={styles.value}>
-                  {elevator.numberOfStops}
-                </Text>
+                <Text style={styles.value}>{elevator.numberOfStops}</Text>
               </View>
 
               <View style={styles.separator} />
-
 
               {/* Tốc độ */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Tốc độ
-                </Text>
+                <Text style={styles.label}>Tốc độ</Text>
 
-                <Text style={styles.value}>
-                  {elevator.speed} m/s
-                </Text>
+                <Text style={styles.value}>{elevator.speed} m/s</Text>
               </View>
 
               <View style={styles.separator} />
-
 
               {/* Độ sâu hố pit */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Độ sâu hố pit
-                </Text>
+                <Text style={styles.label}>Độ sâu hố pit</Text>
 
-                <Text style={styles.value}>
-                  {elevator.pitDepth} cm
-                </Text>
+                <Text style={styles.value}>{elevator.pitDepth} cm</Text>
               </View>
 
               <View style={styles.separator} />
-
 
               {/* Chiều cao overhead */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Chiều cao overhead
-                </Text>
+                <Text style={styles.label}>Chiều cao overhead</Text>
 
-                <Text style={styles.value}>
-                  {elevator.overheadHeight} cm
-                </Text>
+                <Text style={styles.value}>{elevator.overheadHeight} cm</Text>
               </View>
 
               <View style={styles.separator} />
 
-
               {/* Loại truyền động */}
               <View style={styles.infoRow}>
-                <Text style={styles.label}>
-                  Loại truyền động
-                </Text>
+                <Text style={styles.label}>Loại truyền động</Text>
 
-                <Text style={styles.value}>
-                  {elevator.driveType}
-                </Text>
+                <Text style={styles.value}>{elevator.driveType}</Text>
               </View>
-
             </View>
-
           ) : null}
-
         </ScrollView>
       </SafeAreaView>
     </ImageBackground>
   );
 };
 
-
 const styles = StyleSheet.create({
-
   /* ================= BACKGROUND ================= */
 
   background: {
     flex: 1,
   },
-
 
   /* ================= OVERLAY ================= */
 
@@ -254,7 +192,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.48)',
   },
-
 
   /* ================= CONTENT ================= */
 
@@ -271,7 +208,6 @@ const styles = StyleSheet.create({
      */
     justifyContent: 'center',
   },
-
 
   /* ================= HEADER ================= */
 
@@ -291,7 +227,6 @@ const styles = StyleSheet.create({
     color: '#42658F',
   },
 
-
   /* ================= LOADING ================= */
 
   loading: {
@@ -307,7 +242,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#607A9B',
   },
-
 
   /* ================= TECHNICAL CARD ================= */
 
@@ -335,7 +269,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-
   /* ================= INFORMATION ROW ================= */
 
   infoRow: {
@@ -348,7 +281,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-
   label: {
     flex: 1,
 
@@ -356,7 +288,6 @@ const styles = StyleSheet.create({
 
     color: '#607A9B',
   },
-
 
   value: {
     flex: 1,
@@ -370,7 +301,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-
   /* ================= SEPARATOR ================= */
 
   separator: {
@@ -378,7 +308,6 @@ const styles = StyleSheet.create({
 
     backgroundColor: 'rgba(80,120,160,0.12)',
   },
-
 });
 
 export default TechnicalInfo;
