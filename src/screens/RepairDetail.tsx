@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/firebase';
+import { getCache, saveCache } from '../utils/offlineCache';
 import { pick, types } from '@react-native-documents/picker';
 const RepairDetail = ({ route }: any) => {
   const { elevatorId, serviceId } = route.params;
@@ -23,6 +24,7 @@ const RepairDetail = ({ route }: any) => {
   const [service, setService] = useState<any>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOfflineData, setIsOfflineData] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [filesToDelete, setFilesToDelete] = useState<number[]>([]);
@@ -35,69 +37,171 @@ const RepairDetail = ({ route }: any) => {
   }, []);
 
   const loadDetail = async () => {
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      const token = await AsyncStorage.getItem('token');
+    const token = await AsyncStorage.getItem('token');
+    const userId = await AsyncStorage.getItem('userId');
 
-      // ================================
-      // Lấy chi tiết sửa chữa
-      // ================================
-      const response = await fetch(
-        `${API_URL}/elevators/${elevatorId}/services/${serviceId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
+    let loadedService: any = null;
+    let loadedFromCache = false;
+
+    // 1. Ưu tiên tải chi tiết sửa chữa từ Backend.
+    if (token) {
+      try {
+        const response = await fetch(
+          `${API_URL}/elevators/${elevatorId}/services/${serviceId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
-        },
-      );
+        );
 
-      const data = await response.json();
+        const data = await response.json();
 
-      console.log('REPAIR DETAIL RESPONSE:', {
-        status: response.status,
-        ok: response.ok,
-        data,
-      });
+        console.log('REPAIR DETAIL RESPONSE:', {
+          status: response.status,
+          ok: response.ok,
+          data,
+        });
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Không thể lấy thông tin sửa chữa');
+        if (!response.ok) {
+          throw new Error(data.message || 'Không thể lấy thông tin sửa chữa');
+        }
+
+        if (!data?.service) {
+          throw new Error('Backend không trả về thông tin bản ghi sửa chữa');
+        }
+
+        loadedService = data.service;
+        if (userId) {
+          await saveCache(userId, `repairDetail:${serviceId}`, loadedService);
+        }
+      } catch (error) {
+        console.error('Không thể tải chi tiết sửa chữa từ Backend:', error);
       }
-      console.log('REPAIR DETAIL SERVICE:', data.service);
-      setService(data.service);
-
-      // ================================
-      // Lấy file đính kèm
-      // ================================
-      const attachmentResponse = await fetch(
-        `${API_URL}/attachments?recordType=repair&recordId=${serviceId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const attachmentData = await attachmentResponse.json();
-      console.log('REPAIR ATTACHMENTS RESPONSE:', attachmentData);
-      if (attachmentResponse.ok) {
-        setAttachments(Array.isArray(attachmentData) ? attachmentData : []);
-      }
-    } catch (error: any) {
-      console.error('Lỗi lấy chi tiết sửa chữa:', error);
-
-      Alert.alert('Lỗi', error.message || 'Không thể tải thông tin sửa chữa');
-    } finally {
-      setLoading(false);
     }
+
+    // 2. Nếu Backend không truy cập được, đọc cache chi tiết trước.
+    if (!loadedService && userId) {
+      try {
+        const detailCache = await getCache<any>(
+          userId,
+          `repairDetail:${serviceId}`,
+        );
+
+        if (detailCache?.data) {
+          loadedService = detailCache.data;
+          loadedFromCache = true;
+        }
+
+        // 3. Nếu chưa có cache chi tiết, tìm trong danh sách lịch sử sửa chữa
+        // đã được lưu từ màn hình ServiceHistory.
+        if (!loadedService) {
+          const listCache = await getCache<any[]>(
+            userId,
+            `services:${elevatorId}`,
+          );
+
+          if (Array.isArray(listCache?.data)) {
+            loadedService = listCache.data.find(
+              item => String(item?.id) === String(serviceId),
+            ) || null;
+
+            if (loadedService) {
+              loadedFromCache = true;
+              await saveCache(
+                userId,
+                `repairDetail:${serviceId}`,
+                loadedService,
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Lỗi đọc cache chi tiết sửa chữa:', error);
+      }
+    }
+
+    setService(loadedService);
+    setIsOfflineData(loadedFromCache);
+
+    // 4. Tải file đính kèm riêng để lỗi tải file không làm mất thông tin sửa chữa.
+    let loadedAttachments: any[] | null = null;
+
+    if (token) {
+      try {
+        const attachmentResponse = await fetch(
+          `${API_URL}/attachments?recordType=repair&recordId=${serviceId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const attachmentData = await attachmentResponse.json();
+
+        console.log('REPAIR ATTACHMENTS RESPONSE:', attachmentData);
+
+        if (!attachmentResponse.ok) {
+          throw new Error('Không thể tải file đính kèm');
+        }
+
+        loadedAttachments = Array.isArray(attachmentData)
+          ? attachmentData
+          : [];
+
+        if (userId) {
+          await saveCache(
+            userId,
+            `repairAttachments:${serviceId}`,
+            loadedAttachments,
+          );
+        }
+      } catch (error) {
+        console.error('Không thể tải file sửa chữa từ Backend:', error);
+      }
+    }
+
+    // 5. Nếu tải file thất bại, hiển thị file đã lưu trước đó.
+    if (loadedAttachments === null && userId) {
+      try {
+        const attachmentCache = await getCache<any[]>(
+          userId,
+          `repairAttachments:${serviceId}`,
+        );
+
+        loadedAttachments = Array.isArray(attachmentCache?.data)
+          ? attachmentCache.data
+          : [];
+      } catch (error) {
+        console.error('Lỗi đọc cache file sửa chữa:', error);
+      }
+    }
+
+    setAttachments(loadedAttachments || []);
+    setLoading(false);
   };
+
   const startEditing = () => {
+    if (isOfflineData) {
+      return;
+    }
     setEditDate(service.date || '');
     setEditDescription(service.description || '');
     setIsEditing(true);
   };
 
   const saveChanges = async () => {
+    if (isOfflineData) {
+      Alert.alert(
+        'Không thể chỉnh sửa',
+        'Dữ liệu đang được xem từ bộ nhớ offline. Vui lòng kết nối lại Backend để chỉnh sửa.',
+      );
+      return;
+    }
+
     try {
       const token = await AsyncStorage.getItem('token');
 
@@ -266,7 +370,7 @@ const RepairDetail = ({ route }: any) => {
 
             <Text style={styles.subtitle}>Mã bản ghi: #{service.id}</Text>
 
-            {!isEditing ? (
+            {!isOfflineData ? (!isEditing ? (
               <TouchableOpacity
                 style={styles.editButton}
                 onPress={startEditing}
@@ -289,7 +393,7 @@ const RepairDetail = ({ route }: any) => {
                   <Text style={styles.buttonText}>💾 Lưu</Text>
                 </TouchableOpacity>
               </View>
-            )}
+            )) : null}
           </View>
 
           {/* Thông tin sửa chữa */}

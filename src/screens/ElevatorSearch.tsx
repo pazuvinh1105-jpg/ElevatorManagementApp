@@ -84,11 +84,7 @@ const ElevatorSearch = () => {
     } catch (error) {
       console.error(error);
 
-      Alert.alert(
-        'Lỗi kết nối',
-        'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend.',
-      );
-
+     
       setResults([]);
     } finally {
       setLoading(false);

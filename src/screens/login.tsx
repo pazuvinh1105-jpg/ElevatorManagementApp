@@ -54,12 +54,12 @@ const LoginScreen = ({}: Props) => {
         return;
       }
 
-      await signIn(data.token, data.user.role);
+      await signIn(data.token, data.user.role, data.user.id);
     } catch (error) {
       console.error(error);
       Alert.alert(
         'Lỗi kết nối',
-        'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend.',
+        'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.',
       );
     }
   };

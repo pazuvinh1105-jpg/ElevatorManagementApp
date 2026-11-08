@@ -11,93 +11,124 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/firebase';
+import { getCache, saveCache } from '../utils/offlineCache';
 
 const TechnicalInfo = ({ route }: any) => {
   const selectedElevatorId = route.params?.elevatorId;
   const [elevator, setElevator] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const getElevator = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
+ useEffect(() => {
+  let isMounted = true;
 
-        if (!token) {
-          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+  const getElevator = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+
+      if (!token || !userId) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+        return;
+      }
+
+      // 1. Ưu tiên lấy dữ liệu mới từ Backend
+      const response = await fetch(`${API_URL}/elevators`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || 'Không lấy được thông tin thang máy.',
+        );
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error('Dữ liệu thang máy không hợp lệ.');
+      }
+
+      // 2. Lưu danh sách thang máy vào cache
+      await saveCache(userId, 'elevators', data);
+
+      // 3. Chọn đúng thang máy
+      const selectedElevator = selectedElevatorId
+        ? data.find(
+            (item: any) => item.elevatorId === selectedElevatorId,
+          )
+        : data[0];
+
+      if (isMounted) {
+        if (selectedElevator) {
+          setElevator(selectedElevator);
+        } else {
+          Alert.alert(
+            'Thông báo',
+            'Không tìm thấy thang máy được phân quyền.',
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Lỗi lấy thông số kỹ thuật:', error);
+
+      // 4. Backend không truy cập được: đọc dữ liệu cache
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+
+        if (!userId) {
           return;
         }
 
-        let elevatorId = selectedElevatorId;
+        const cached = await getCache<any[]>(
+          userId,
+          'elevators',
+        );
 
-        // Nếu Technician đã chọn thang máy
-        if (elevatorId) {
-          const response = await fetch(`${API_URL}/elevators`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
+        if (cached && Array.isArray(cached.data)) {
+          const selectedElevator = selectedElevatorId
+            ? cached.data.find(
+                (item: any) =>
+                  item.elevatorId === selectedElevatorId,
+              )
+            : cached.data[0];
 
-          const data = await response.json();
-
-          if (!response.ok) {
-            Alert.alert(
-              'Lỗi',
-              data.message || 'Không lấy được thông tin thang máy.',
-            );
-            return;
-          }
-
-          const selectedElevator = data.find(
-            (item: any) => item.elevatorId === elevatorId,
-          );
-
-          if (selectedElevator) {
-            setElevator(selectedElevator);
-          } else {
-            Alert.alert('Thông báo', 'Không tìm thấy thang máy được chọn.');
+          if (isMounted) {
+            if (selectedElevator) {
+              setElevator(selectedElevator);
+            } else {
+              Alert.alert(
+                'Thông báo',
+                'Không tìm thấy thông tin thang máy trong dữ liệu đã lưu.',
+              );
+            }
           }
         } else {
-          // Owner: không truyền elevatorId
-          // nên lấy thang máy được phân quyền
-          const response = await fetch(`${API_URL}/elevators`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
+          if (isMounted) {
             Alert.alert(
-              'Lỗi',
-              data.message || 'Không lấy được thông tin thang máy.',
-            );
-            return;
-          }
-
-          if (data.length > 0) {
-            setElevator(data[0]);
-          } else {
-            Alert.alert(
-              'Thông báo',
-              'Không tìm thấy thang máy được phân quyền.',
+              'Chưa có dữ liệu offline',
+              'Thông tin thang máy chưa được lưu trước đó.',
             );
           }
         }
-      } catch (error) {
-        console.error('Lỗi lấy thông số kỹ thuật:', error);
-
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
-      } finally {
+      } catch (cacheError) {
+        console.error('Lỗi đọc cache thông số kỹ thuật:', cacheError);
+      }
+    } finally {
+      if (isMounted) {
         setLoading(false);
       }
-    };
+    }
+  };
 
-    getElevator();
-  }, [selectedElevatorId]);
+  getElevator();
 
+  return () => {
+    isMounted = false;
+  };
+}, [selectedElevatorId]);
   return (
     <ImageBackground
       source={require('../../assets/background.jpg')}

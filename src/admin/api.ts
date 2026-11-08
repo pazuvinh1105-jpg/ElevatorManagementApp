@@ -1,12 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config/firebase';
 
-export { API_URL };
+export const API_URL = 'http://127.0.0.1:3000';
 
-export async function apiRequest<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await AsyncStorage.getItem('token');
   if (!token) {
     throw new Error('Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.');

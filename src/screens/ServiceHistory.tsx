@@ -16,6 +16,7 @@ import { API_URL } from '../config/firebase';
 import { pick, types } from '@react-native-documents/picker';
 import DatePickerField from '../components/DatePickerField';
 import { sortRecordsByDate } from '../utils/sortRecordsByDate';
+import { getCache, saveCache } from '../utils/offlineCache';
 
 const ServiceHistory = ({ route, navigation }: any) => {
   const selectedElevatorId = route.params?.elevatorId;
@@ -40,51 +41,75 @@ const ServiceHistory = ({ route, navigation }: any) => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const getServices = async () => {
+      let currentElevatorId = selectedElevatorId;
+
       try {
         const token = await AsyncStorage.getItem('token');
+        const userId = await AsyncStorage.getItem('userId');
 
-        if (!token) {
+        if (!token || !userId) {
           Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
           return;
         }
 
-        let currentElevatorId = selectedElevatorId;
-
-        // Nếu Technician chưa truyền elevatorId
-        // thì lấy thang máy được phân quyền của Owner
+        // Owner không truyền elevatorId: ưu tiên lấy từ Backend,
+        // nếu offline thì dùng danh sách thang máy đã lưu trước đó.
         if (!currentElevatorId) {
-          const elevatorResponse = await fetch(`${API_URL}/elevators`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
+          try {
+            const elevatorResponse = await fetch(`${API_URL}/elevators`, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
 
-          const elevatorData = await elevatorResponse.json();
+            if (!elevatorResponse.ok) {
+              throw new Error('Không lấy được thông tin thang máy.');
+            }
 
-          if (!elevatorResponse.ok) {
-            Alert.alert(
-              'Lỗi',
-              elevatorData.message || 'Không lấy được thông tin thang máy.',
-            );
-            return;
+            const elevatorData = await elevatorResponse.json();
+
+            if (!Array.isArray(elevatorData) || elevatorData.length === 0) {
+              Alert.alert(
+                'Thông báo',
+                'Không tìm thấy thang máy được phân quyền.',
+              );
+              return;
+            }
+
+            currentElevatorId = elevatorData[0].elevatorId;
+            await saveCache(userId, 'elevators', elevatorData);
+          } catch (error) {
+            console.log('Không lấy được danh sách thang máy từ Backend:', error);
+
+            const cachedElevators = await getCache<any[]>(userId, 'elevators');
+
+            if (
+              cachedElevators &&
+              Array.isArray(cachedElevators.data) &&
+              cachedElevators.data.length > 0
+            ) {
+              currentElevatorId = cachedElevators.data[0].elevatorId;
+            } else {
+              if (isMounted) {
+                setServices([]);
+              }
+              return;
+            }
           }
-
-          if (elevatorData.length === 0) {
-            Alert.alert(
-              'Thông báo',
-              'Không tìm thấy thang máy được phân quyền.',
-            );
-            return;
-          }
-
-          currentElevatorId = elevatorData[0].elevatorId;
         }
 
-        setElevatorId(currentElevatorId);
+        if (!currentElevatorId) {
+          return;
+        }
 
-        // Lấy lịch sử dịch vụ của đúng thang máy
+        if (isMounted) {
+          setElevatorId(currentElevatorId);
+        }
+
         const serviceResponse = await fetch(
           `${API_URL}/elevators/${currentElevatorId}/services`,
           {
@@ -95,27 +120,71 @@ const ServiceHistory = ({ route, navigation }: any) => {
           },
         );
 
-        const serviceData = await serviceResponse.json();
-
         if (!serviceResponse.ok) {
-          Alert.alert(
-            'Lỗi',
-            serviceData.message || 'Không lấy được lịch sử dịch vụ.',
-          );
-          return;
+          throw new Error('Không lấy được lịch sử dịch vụ.');
         }
 
-        setServices(sortRecordsByDate(serviceData, (item: any) => item.date));
+        const serviceData = await serviceResponse.json();
+
+        if (!Array.isArray(serviceData)) {
+          throw new Error('Dữ liệu lịch sử dịch vụ không hợp lệ.');
+        }
+
+        const sortedServices = sortRecordsByDate(
+          serviceData,
+          (item: any) => item.date,
+        );
+
+        await saveCache(
+          userId,
+          `services:${currentElevatorId}`,
+          sortedServices,
+        );
+
+        if (isMounted) {
+          setServices(sortedServices);
+        }
       } catch (error) {
         console.error('Lỗi lấy lịch sử dịch vụ:', error);
 
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+        try {
+          const userId = await AsyncStorage.getItem('userId');
+
+          if (!userId || !currentElevatorId) {
+            return;
+          }
+
+          const cachedServices = await getCache<any[]>(
+            userId,
+            `services:${currentElevatorId}`,
+          );
+
+          if (isMounted) {
+            setServices(
+              cachedServices && Array.isArray(cachedServices.data)
+                ? cachedServices.data
+                : [],
+            );
+          }
+        } catch (cacheError) {
+          console.error('Lỗi đọc cache lịch sử dịch vụ:', cacheError);
+
+          if (isMounted) {
+            setServices([]);
+          }
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     getServices();
+
+    return () => {
+      isMounted = false;
+    };
   }, [selectedElevatorId]);
 
   // Chuyển loại dịch vụ sang tiếng Việt
@@ -142,8 +211,9 @@ const ServiceHistory = ({ route, navigation }: any) => {
       setChecklistResults({});
 
       const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
 
-      if (!token) {
+      if (!token || !userId) {
         Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
         return;
       }
@@ -158,18 +228,46 @@ const ServiceHistory = ({ route, navigation }: any) => {
         },
       );
 
-      const data = await response.json();
-
       if (!response.ok) {
-        Alert.alert('Lỗi', data.message || 'Không thể lấy checklist bảo trì.');
-        return;
+        throw new Error('Không thể lấy checklist bảo trì.');
       }
 
-      setMaintenanceChecklists(data.checklists || []);
+      const data = await response.json();
+      const checklists = Array.isArray(data.checklists)
+        ? data.checklists
+        : [];
+
+      setMaintenanceChecklists(checklists);
+
+      await saveCache(
+        userId,
+        `maintenanceChecklists:${round}`,
+        checklists,
+      );
     } catch (error) {
       console.error('Lỗi lấy checklist bảo trì:', error);
 
-      Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+
+        if (!userId) {
+          return;
+        }
+
+        const cachedChecklists = await getCache<any[]>(
+          userId,
+          `maintenanceChecklists:${round}`,
+        );
+
+        setMaintenanceChecklists(
+          cachedChecklists && Array.isArray(cachedChecklists.data)
+            ? cachedChecklists.data
+            : [],
+        );
+      } catch (cacheError) {
+        console.error('Lỗi đọc cache checklist bảo trì:', cacheError);
+        setMaintenanceChecklists([]);
+      }
     } finally {
       setLoadingChecklists(false);
     }
@@ -348,13 +446,26 @@ const ServiceHistory = ({ route, navigation }: any) => {
 
         const refreshData = await refreshResponse.json();
 
-        if (refreshResponse.ok) {
-          setServices(sortRecordsByDate(refreshData, (item: any) => item.date));
+        if (refreshResponse.ok && Array.isArray(refreshData)) {
+          const sortedServices = sortRecordsByDate(
+            refreshData,
+            (item: any) => item.date,
+          );
+
+          setServices(sortedServices);
+
+          const userId = await AsyncStorage.getItem('userId');
+          if (userId) {
+            await saveCache(userId, `services:${elevatorId}`, sortedServices);
+          }
         }
       } catch (error) {
         console.error('Lỗi tạo phiếu bảo trì:', error);
 
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+        Alert.alert(
+          'Không thể thực hiện thao tác',
+          'Vui lòng kiểm tra kết nối mạng và thử lại khi máy chủ khả dụng.',
+        );
       } finally {
         setSaving(false);
       }
@@ -468,18 +579,26 @@ const ServiceHistory = ({ route, navigation }: any) => {
 
       const refreshData = await refreshResponse.json();
 
-      if (refreshResponse.ok) {
-        setServices(
-          sortRecordsByDate(
-            refreshData.filter((item: any) => item.type !== 'inspection'),
-            (item: any) => item.date,
-          ),
+      if (refreshResponse.ok && Array.isArray(refreshData)) {
+        const sortedServices = sortRecordsByDate(
+          refreshData.filter((item: any) => item.type !== 'inspection'),
+          (item: any) => item.date,
         );
+
+        setServices(sortedServices);
+
+        const userId = await AsyncStorage.getItem('userId');
+        if (userId) {
+          await saveCache(userId, `services:${elevatorId}`, sortedServices);
+        }
       }
     } catch (error) {
       console.error('Lỗi thêm lịch sử dịch vụ:', error);
 
-      Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+      Alert.alert(
+          'Không thể thực hiện thao tác',
+          'Vui lòng kiểm tra kết nối mạng và thử lại khi máy chủ khả dụng.',
+        );
     } finally {
       setSaving(false);
     }

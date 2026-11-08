@@ -1,7 +1,10 @@
+
 import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
-import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {AuthProvider, useAuth} from './AuthContext';
+import { View } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { AuthProvider, useAuth } from './AuthContext';
+import NetworkStatusBanner from './NetworkStatusBanner';
 
 import LoginScreen from '../screens/login';
 import RegisterScreen from '../screens/register';
@@ -48,46 +51,54 @@ export type RootStackParamList = {
   };
 
   // Shared screens
-  ElevatorInfo: {elevatorId?: string} | undefined;
-  TechnicalInfo: {elevatorId?: string} | undefined;
-  Inspections: {elevatorId?: string} | undefined;
-  InspectionDetail: {
-  elevatorId: string;
-  inspectionId: number;
-};
-ServiceHistory: {elevatorId?: string} | undefined;
-  ServiceDetail: {
-  elevatorId: string;
-  serviceId: number;
-  };
-  ServiceEdit: {
-  elevatorId: string;
-  serviceId: number;
-  };
-  RepairDetail: {
-  elevatorId: string;
-  serviceId: number;
-};
+  ElevatorInfo: { elevatorId?: string } | undefined;
+  TechnicalInfo: { elevatorId?: string } | undefined;
+  Inspections: { elevatorId?: string } | undefined;
 
-ReplacementDetail: {
-  elevatorId: string;
-  serviceId: number;
-};
+  InspectionDetail: {
+    elevatorId: string;
+    inspectionId: number;
+  };
+
+  ServiceHistory: { elevatorId?: string } | undefined;
+
+  ServiceDetail: {
+    elevatorId: string;
+    serviceId: number;
+  };
+
+  ServiceEdit: {
+    elevatorId: string;
+    serviceId: number;
+  };
+
+  RepairDetail: {
+    elevatorId: string;
+    serviceId: number;
+  };
+
+  ReplacementDetail: {
+    elevatorId: string;
+    serviceId: number;
+  };
 
   // Admin
   AdminHome: undefined;
   AdminElevators: undefined;
-  AdminElevatorForm: {elevatorId?: string} | undefined;
+  AdminElevatorForm: { elevatorId?: string } | undefined;
   AdminUsers: undefined;
+
   AdminUserForm:
     | {
         userId?: number;
         role?: 'owner' | 'technician';
       }
     | undefined;
+
   AdminElevatorActions: {
     elevatorId: string;
   };
+
   AdminRecordForm: {
     elevatorId: string;
     kind: 'inspection' | 'service';
@@ -98,114 +109,147 @@ ReplacementDetail: {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
-  const {role, ready} = useAuth();
-  if (!ready) return null;
+  const { role, ready } = useAuth();
+
+  if (!ready) {
+    return null;
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        key={role || 'guest'}
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-        }}>
-        {!role ? <>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-        </> : <>
-        {role === 'admin' && <Stack.Screen name="AdminHome" component={AdminHome} />}
-        {role === 'technician' && <Stack.Screen name="ElevatorSearch" component={ElevatorSearch} />}
-        {role === 'owner' && <Stack.Screen name="OwnerHome" component={OwnerHome} />}
-        <Stack.Screen name="Home" component={HomeScreen} />
+      <View style={{ flex: 1 }}>
+        {/* Thông báo kết nối dùng chung cho cả 3 Role */}
+        {role && <NetworkStatusBanner />}
 
-        {/* Owner */}
+        <Stack.Navigator
+          key={role || 'guest'}
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_right',
+          }}
+        >
+          {!role ? (
+            <>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Register" component={RegisterScreen} />
+            </>
+          ) : (
+            <>
+              {/* Màn hình mặc định theo Role */}
+              {role === 'admin' && (
+                <Stack.Screen name="AdminHome" component={AdminHome} />
+              )}
 
-        {/* Technician */}
+              {role === 'technician' && (
+                <Stack.Screen
+                  name="ElevatorSearch"
+                  component={ElevatorSearch}
+                />
+              )}
 
-        <Stack.Screen
-          name="TechnicianElevatorMenu"
-          component={TechnicianElevatorMenu}
-        />
+              {role === 'owner' && (
+                <Stack.Screen name="OwnerHome" component={OwnerHome} />
+              )}
 
-        {/* Shared */}
-        <Stack.Screen
-          name="ElevatorInfo"
-          component={ElevatorInfo}
-        />
+              <Stack.Screen name="Home" component={HomeScreen} />
 
-        <Stack.Screen
-          name="TechnicalInfo"
-          component={TechnicalInfo}
-        />
+              {/* Technician */}
+              <Stack.Screen
+                name="TechnicianElevatorMenu"
+                component={TechnicianElevatorMenu}
+              />
 
-        <Stack.Screen
-          name="Inspections"
-          component={Inspections}
-        />
-        <Stack.Screen
-          name="InspectionDetail"
-          component={InspectionDetail}
-          options={{
-           title: 'Chi tiết kiểm định',
-        }}
-        />
-        <Stack.Screen
-          name="ServiceHistory"
-          component={ServiceHistory}
-        />
-        <Stack.Screen
-          name="ServiceDetail"
-          component={ServiceDetail}
-        />
-        <Stack.Screen
-         name="ServiceEdit"
-         component={ServiceEdit}
-        />
-        <Stack.Screen
-         name="RepairDetail"
-         component={RepairDetail}
-        />
+              {/* Shared screens */}
+              <Stack.Screen
+                name="ElevatorInfo"
+                component={ElevatorInfo}
+              />
 
-        <Stack.Screen
-         name="ReplacementDetail"
-         component={ReplacementDetail}
-        />
-        {/* Admin */}
+              <Stack.Screen
+                name="TechnicalInfo"
+                component={TechnicalInfo}
+              />
 
-        <Stack.Screen
-          name="AdminElevators"
-          component={AdminElevators}
-        />
+              <Stack.Screen
+                name="Inspections"
+                component={Inspections}
+              />
 
-        <Stack.Screen
-          name="AdminElevatorForm"
-          component={AdminElevatorForm}
-        />
+              <Stack.Screen
+                name="InspectionDetail"
+                component={InspectionDetail}
+                options={{
+                  title: 'Chi tiết kiểm định',
+                }}
+              />
 
-        <Stack.Screen
-          name="AdminUsers"
-          component={AdminUsers}
-        />
+              <Stack.Screen
+                name="ServiceHistory"
+                component={ServiceHistory}
+              />
 
-        <Stack.Screen
-          name="AdminUserForm"
-          component={AdminUserForm}
-        />
+              <Stack.Screen
+                name="ServiceDetail"
+                component={ServiceDetail}
+              />
 
-        <Stack.Screen
-          name="AdminElevatorActions"
-          component={AdminElevatorActions}
-        />
+              <Stack.Screen
+                name="ServiceEdit"
+                component={ServiceEdit}
+              />
 
-        <Stack.Screen
-          name="AdminRecordForm"
-          component={AdminRecordForm}
-        />
-        </>}
-      </Stack.Navigator>
+              <Stack.Screen
+                name="RepairDetail"
+                component={RepairDetail}
+              />
+
+              <Stack.Screen
+                name="ReplacementDetail"
+                component={ReplacementDetail}
+              />
+
+              {/* Admin */}
+              <Stack.Screen
+                name="AdminElevators"
+                component={AdminElevators}
+              />
+
+              <Stack.Screen
+                name="AdminElevatorForm"
+                component={AdminElevatorForm}
+              />
+
+              <Stack.Screen
+                name="AdminUsers"
+                component={AdminUsers}
+              />
+
+              <Stack.Screen
+                name="AdminUserForm"
+                component={AdminUserForm}
+              />
+
+              <Stack.Screen
+                name="AdminElevatorActions"
+                component={AdminElevatorActions}
+              />
+
+              <Stack.Screen
+                name="AdminRecordForm"
+                component={AdminRecordForm}
+              />
+            </>
+          )}
+        </Stack.Navigator>
+      </View>
     </NavigationContainer>
   );
 };
 
 export default function AppNavigation() {
-  return <AuthProvider><AppNavigator /></AuthProvider>;
+  return (
+    <AuthProvider>
+      <AppNavigator />
+    </AuthProvider>
+  );
 }

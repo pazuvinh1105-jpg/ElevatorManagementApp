@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/firebase';
+import { getCache, saveCache } from '../utils/offlineCache';
 
 const ServiceDetail = ({ route, navigation }: any) => {
   const { elevatorId, serviceId } = route.params;
@@ -22,78 +23,159 @@ const ServiceDetail = ({ route, navigation }: any) => {
   const [attachments, setAttachments] = useState<any[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const getServiceDetail = async () => {
+      let userId: string | null = null;
+
       try {
         const token = await AsyncStorage.getItem('token');
         const userRole = await AsyncStorage.getItem('role');
+        userId = await AsyncStorage.getItem('userId');
 
-        if (!token) {
-          Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
-          return;
-        }
+        if (!isMounted) return;
 
         setRole(userRole);
 
-        // ==============================
-        // 1. Lấy thông tin chi tiết phiếu
-        // ==============================
-        const response = await fetch(
-          `${API_URL}/elevators/${elevatorId}/maintenance/${serviceId}`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          Alert.alert('Lỗi', data.message || 'Không thể lấy chi tiết phiếu.');
-          return;
+        if (!userId) {
+          console.warn('Không tìm thấy userId để đọc dữ liệu offline.');
         }
 
-        setService(data);
-
-        // ==============================
-        // 2. Lấy file đính kèm của phiếu
-        // ==============================
-        try {
-          const attachmentResponse = await fetch(
-            `${API_URL}/attachments?recordType=maintenance&recordId=${serviceId}`,
-            {
-              method: 'GET',
-              headers: {
-                Authorization: `Bearer ${token}`,
+        // 1. Ưu tiên tải chi tiết phiếu từ Backend khi có token.
+        if (token) {
+          try {
+            const response = await fetch(
+              `${API_URL}/elevators/${elevatorId}/maintenance/${serviceId}`,
+              {
+                method: 'GET',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
               },
-            },
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+              if (isMounted) setService(data);
+
+              if (userId) {
+                await saveCache(
+                  userId,
+                  `serviceDetail:${serviceId}`,
+                  data,
+                );
+              }
+            } else {
+              console.error(
+                'Lỗi lấy chi tiết phiếu:',
+                data.message || response.status,
+              );
+            }
+          } catch (error) {
+            console.error('Không thể tải chi tiết phiếu từ Backend:', error);
+          }
+        }
+
+        // 2. Nếu chưa có dữ liệu online, đọc cache chi tiết phiếu.
+        if (userId && isMounted) {
+          const cachedDetail = await getCache<any>(
+            userId,
+            `serviceDetail:${serviceId}`,
           );
 
-          const attachmentData = await attachmentResponse.json();
-
-          if (attachmentResponse.ok) {
-            setAttachments(Array.isArray(attachmentData) ? attachmentData : []);
+          if (cachedDetail?.data) {
+            setService(cachedDetail.data);
           } else {
-            console.error('Lỗi lấy attachments:', attachmentData);
+            // 3. Dự phòng: tìm phiếu trong danh sách lịch sử bảo trì đã cache.
+            const cachedServices = await getCache<any[]>(
+              userId,
+              `services:${elevatorId}`,
+            );
 
-            setAttachments([]);
+            if (Array.isArray(cachedServices?.data)) {
+              const cachedService = cachedServices.data.find((item: any) => {
+                const itemId =
+                  item?.service?.id ??
+                  item?.id ??
+                  item?.serviceId;
+                return String(itemId) === String(serviceId);
+              });
+
+              if (cachedService) {
+                setService(cachedService);
+              }
+            }
           }
-        } catch (attachmentError) {
-          console.error('Lỗi kết nối khi lấy attachments:', attachmentError);
+        }
 
-          setAttachments([]);
+        // 4. Lấy file đính kèm; nếu offline thì đọc cache.
+        let attachmentLoaded = false;
+
+        if (token) {
+          try {
+            const attachmentResponse = await fetch(
+              `${API_URL}/attachments?recordType=maintenance&recordId=${serviceId}`,
+              {
+                method: 'GET',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            const attachmentData = await attachmentResponse.json();
+
+            if (attachmentResponse.ok) {
+              const files = Array.isArray(attachmentData)
+                ? attachmentData
+                : [];
+
+              if (isMounted) setAttachments(files);
+              attachmentLoaded = true;
+
+              if (userId) {
+                await saveCache(
+                  userId,
+                  `serviceAttachments:${serviceId}`,
+                  files,
+                );
+              }
+            } else {
+              console.error('Lỗi lấy attachments:', attachmentData);
+            }
+          } catch (attachmentError) {
+            console.error(
+              'Không thể tải attachments từ Backend:',
+              attachmentError,
+            );
+          }
+        }
+
+        if (!attachmentLoaded && userId && isMounted) {
+          const cachedAttachments = await getCache<any[]>(
+            userId,
+            `serviceAttachments:${serviceId}`,
+          );
+
+          setAttachments(
+            Array.isArray(cachedAttachments?.data)
+              ? cachedAttachments.data
+              : [],
+          );
         }
       } catch (error) {
-        console.error('Lỗi lấy chi tiết phiếu:', error);
-
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+        console.error('Lỗi đọc chi tiết phiếu:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     getServiceDetail();
+
+    return () => {
+      isMounted = false;
+    };
   }, [elevatorId, serviceId]);
 
   if (loading) {
@@ -126,7 +208,7 @@ const ServiceDetail = ({ route, navigation }: any) => {
             <Text style={styles.emptyTitle}>Không tìm thấy phiếu</Text>
 
             <Text style={styles.emptyText}>
-              Không thể tải thông tin chi tiết của phiếu này.
+              Không tìm thấy thông tin phiếu trong dữ liệu đã tải hoặc đã lưu trên thiết bị.
             </Text>
           </View>
         </SafeAreaView>

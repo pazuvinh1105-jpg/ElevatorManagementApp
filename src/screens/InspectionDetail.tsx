@@ -11,6 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/firebase';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { getCache, saveCache } from '../utils/offlineCache';
 
 type RootStackParamList = {
   InspectionDetail: {
@@ -46,71 +47,154 @@ const InspectionDetail = ({ route }: Props) => {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-
-      const token = await AsyncStorage.getItem('token');
-
-      if (!token) {
-        Alert.alert('Lỗi', 'Không tìm thấy token đăng nhập');
-        return;
-      }
-
-      // Lấy danh sách kiểm định
-      const inspectionResponse = await fetch(
-        `${API_URL}/elevators/${elevatorId}/inspections`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      if (!inspectionResponse.ok) {
-        throw new Error('Không thể tải dữ liệu kiểm định');
-      }
-
-      const inspectionData = await inspectionResponse.json();
-
-      const foundInspection = inspectionData.find(
-        (item: Inspection) => item.id === inspectionId,
-      );
-
-      if (!foundInspection) {
-        Alert.alert('Thông báo', 'Không tìm thấy phiếu kiểm định');
-        return;
-      }
-
-      setInspection(foundInspection);
-
-      // Lấy attachment của inspection
-      const attachmentResponse = await fetch(
-        `${API_URL}/attachments?recordType=inspection&recordId=${inspectionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      if (attachmentResponse.ok) {
-        const attachmentData = await attachmentResponse.json();
-        setAttachments(attachmentData);
-      } else {
-        setAttachments([]);
-      }
-    } catch (error) {
-      console.log('Lỗi tải chi tiết kiểm định:', error);
-      Alert.alert('Lỗi', 'Không thể tải chi tiết kiểm định');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      try {
+        if (isMounted) {
+          setLoading(true);
+        }
+
+        const token = await AsyncStorage.getItem('token');
+        const userId = await AsyncStorage.getItem('userId');
+
+        if (!token || !userId) {
+          if (isMounted) {
+            Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
+          }
+          return;
+        }
+
+        // 1. Tải thông tin phiếu kiểm định từ Backend.
+        // Danh sách này cũng được lưu cache ở màn hình Inspections.
+        let foundInspection: Inspection | undefined;
+
+        try {
+          const inspectionResponse = await fetch(
+            `${API_URL}/elevators/${elevatorId}/inspections`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (!inspectionResponse.ok) {
+            throw new Error('Không thể tải dữ liệu kiểm định.');
+          }
+
+          const inspectionData = await inspectionResponse.json();
+
+          if (!Array.isArray(inspectionData)) {
+            throw new Error('Dữ liệu kiểm định không hợp lệ.');
+          }
+
+          foundInspection = inspectionData.find(
+            (item: Inspection) => item.id === inspectionId,
+          );
+
+          // Cập nhật cache danh sách để lần sau có thể xem offline.
+          await saveCache(
+            userId,
+            `inspections:${elevatorId}`,
+            inspectionData,
+          );
+        } catch (error) {
+          console.log('Không tải được phiếu kiểm định từ Backend:', error);
+
+          // 2. Backend không truy cập được: lấy phiếu từ cache.
+          const cachedInspections = await getCache<Inspection[]>(
+            userId,
+            `inspections:${elevatorId}`,
+          );
+
+          if (cachedInspections && Array.isArray(cachedInspections.data)) {
+            foundInspection = cachedInspections.data.find(
+              item => item.id === inspectionId,
+            );
+          }
+        }
+
+        if (isMounted) {
+          setInspection(foundInspection || null);
+        }
+
+        if (!foundInspection) {
+          if (isMounted) {
+            setAttachments([]);
+          }
+          return;
+        }
+
+        // 3. Tải tệp đính kèm từ Backend.
+        // Tệp đính kèm có cache riêng theo từng phiếu kiểm định.
+        try {
+          const attachmentResponse = await fetch(
+            `${API_URL}/attachments?recordType=inspection&recordId=${inspectionId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (!attachmentResponse.ok) {
+            throw new Error('Không thể tải tệp đính kèm.');
+          }
+
+          const attachmentData = await attachmentResponse.json();
+
+          if (!Array.isArray(attachmentData)) {
+            throw new Error('Dữ liệu tệp đính kèm không hợp lệ.');
+          }
+
+          await saveCache(
+            userId,
+            `inspectionAttachments:${inspectionId}`,
+            attachmentData,
+          );
+
+          if (isMounted) {
+            setAttachments(attachmentData);
+          }
+        } catch (error) {
+          console.log('Không tải được tệp đính kèm từ Backend:', error);
+
+          // 4. Nếu offline, hiển thị các tệp đã được lưu cache trước đó.
+          const cachedAttachments = await getCache<Attachment[]>(
+            userId,
+            `inspectionAttachments:${inspectionId}`,
+          );
+
+          if (isMounted) {
+            setAttachments(
+              cachedAttachments && Array.isArray(cachedAttachments.data)
+                ? cachedAttachments.data
+                : [],
+            );
+          }
+        }
+      } catch (error) {
+        console.log('Lỗi tải chi tiết kiểm định:', error);
+
+        if (isMounted) {
+          setInspection(null);
+          setAttachments([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     loadData();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [elevatorId, inspectionId]);
 
   const formatFileSize = (size?: number) => {
     if (!size) {
@@ -152,7 +236,7 @@ const InspectionDetail = ({ route }: Props) => {
   if (!inspection) {
     return (
       <View style={styles.center}>
-        <Text>Không tìm thấy phiếu kiểm định.</Text>
+        <Text>Không tìm thấy phiếu kiểm định trong dữ liệu đã tải hoặc đã lưu.</Text>
       </View>
     );
   }
@@ -187,7 +271,7 @@ const InspectionDetail = ({ route }: Props) => {
 
         {attachments.length === 0 ? (
           <View style={styles.emptyAttachment}>
-            <Text style={styles.emptyText}>Không có tệp đính kèm</Text>
+            <Text style={styles.emptyText}>Không có tệp đính kèm đã lưu</Text>
           </View>
         ) : (
           attachments.map(file => (
@@ -231,6 +315,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
 
   loadingText: {

@@ -16,6 +16,7 @@ import { API_URL } from '../config/firebase';
 import { pick, types } from '@react-native-documents/picker';
 import DatePickerField from '../components/DatePickerField';
 import { sortRecordsByDate } from '../utils/sortRecordsByDate';
+import { getCache, saveCache } from '../utils/offlineCache';
 import { useNavigation } from '@react-navigation/native';
 
 const Inspections = ({ route }: any) => {
@@ -34,85 +35,174 @@ const Inspections = ({ route }: any) => {
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  
+useEffect(() => {
+    let isMounted = true;
+
     const getInspections = async () => {
+      let currentElevatorId: string | null = selectedElevatorId || null;
+
       try {
         const token = await AsyncStorage.getItem('token');
+        const userId = await AsyncStorage.getItem('userId');
 
-        if (!token) {
+        if (!token || !userId) {
           Alert.alert('Lỗi', 'Không tìm thấy thông tin đăng nhập.');
           return;
         }
 
-        let elevatorId = selectedElevatorId;
+        // 1. Xác định thang máy.
+        // Technician có elevatorId từ màn hình trước.
+        // Owner không có elevatorId nên lấy thang máy đầu tiên được phân quyền.
+        if (!currentElevatorId) {
+          try {
+            const elevatorResponse = await fetch(`${API_URL}/elevators`, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
 
-        // Nếu Technician đã chọn một thang máy
-        if (!elevatorId) {
-          // Owner: lấy thang máy được phân quyền
-          const elevatorResponse = await fetch(`${API_URL}/elevators`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
+            if (!elevatorResponse.ok) {
+              throw new Error('Không lấy được thông tin thang máy.');
+            }
 
-          const elevatorData = await elevatorResponse.json();
+            const elevatorData = await elevatorResponse.json();
 
-          if (!elevatorResponse.ok) {
-            Alert.alert(
-              'Lỗi',
-              elevatorData.message || 'Không lấy được thông tin thang máy.',
-            );
-            return;
+            if (!Array.isArray(elevatorData)) {
+              throw new Error('Dữ liệu thang máy không hợp lệ.');
+            }
+
+            if (elevatorData.length === 0) {
+              if (isMounted) {
+                Alert.alert(
+                  'Thông báo',
+                  'Không tìm thấy thang máy được phân quyền.',
+                );
+              }
+              return;
+            }
+
+            currentElevatorId = elevatorData[0].elevatorId;
+
+            // Lưu lại danh sách thang máy để Owner có thể xác định
+            // elevatorId khi mở màn hình trong lần mất kết nối sau.
+            await saveCache(userId, 'elevators', elevatorData);
+          } catch (elevatorError) {
+            console.error('Không lấy được thang máy từ Backend:', elevatorError);
+
+            // Khi offline, dùng danh sách thang máy đã lưu trước đó.
+            const cachedElevators = await getCache<any[]>(userId, 'elevators');
+
+            if (
+              cachedElevators &&
+              Array.isArray(cachedElevators.data) &&
+              cachedElevators.data.length > 0
+            ) {
+              currentElevatorId = cachedElevators.data[0].elevatorId;
+            } else {
+              if (isMounted) {
+                setInspections([]);
+                Alert.alert(
+                  'Chưa có dữ liệu offline',
+                  'Thông tin thang máy chưa được lưu trước đó nên chưa thể hiển thị dữ liệu kiểm định.',
+                );
+              }
+              return;
+            }
           }
-
-          if (elevatorData.length === 0) {
-            Alert.alert(
-              'Thông báo',
-              'Không tìm thấy thang máy được phân quyền.',
-            );
-            return;
-          }
-
-          elevatorId = elevatorData[0].elevatorId;
         }
 
-        setElevatorId(elevatorId);
-
-        // Lấy dữ liệu kiểm định của đúng thang máy
-        const inspectionResponse = await fetch(
-          `${API_URL}/elevators/${elevatorId}/inspections`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        const inspectionData = await inspectionResponse.json();
-
-        if (!inspectionResponse.ok) {
-          Alert.alert(
-            'Lỗi',
-            inspectionData.message || 'Không lấy được dữ liệu kiểm định.',
-          );
+        if (!currentElevatorId) {
+          if (isMounted) {
+            setInspections([]);
+          }
           return;
         }
 
-        setInspections(
-          sortRecordsByDate(inspectionData, (item: any) => item.inspectionDate),
-        );
-      } catch (error) {
-        console.error('Lỗi lấy dữ liệu kiểm định:', error);
+        if (isMounted) {
+          setElevatorId(currentElevatorId);
+        }
 
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+        // 2. Tải danh sách kiểm định từ Backend.
+        try {
+          const inspectionResponse = await fetch(
+            `${API_URL}/elevators/${currentElevatorId}/inspections`,
+            {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (!inspectionResponse.ok) {
+            throw new Error('Không lấy được dữ liệu kiểm định.');
+          }
+
+          const inspectionData = await inspectionResponse.json();
+
+          if (!Array.isArray(inspectionData)) {
+            throw new Error('Dữ liệu kiểm định không hợp lệ.');
+          }
+
+          const sortedData = sortRecordsByDate(
+            inspectionData,
+            (item: any) => item.inspectionDate,
+          );
+
+          // 3. Lưu cache riêng theo tài khoản và từng thang máy.
+          await saveCache(
+            userId,
+            `inspections:${currentElevatorId}`,
+            sortedData,
+          );
+
+          if (isMounted) {
+            setInspections(sortedData);
+          }
+        } catch (inspectionError) {
+          console.error('Không lấy được dữ liệu kiểm định từ Backend:', inspectionError);
+
+          // 4. Backend không truy cập được: hiển thị danh sách đã lưu.
+          const cachedInspections = await getCache<any[]>(
+            userId,
+            `inspections:${currentElevatorId}`,
+          );
+
+          if (
+            cachedInspections &&
+            Array.isArray(cachedInspections.data)
+          ) {
+            if (isMounted) {
+              setInspections(cachedInspections.data);
+            }
+          } else if (isMounted) {
+            setInspections([]);
+            Alert.alert(
+              'Chưa có dữ liệu offline',
+              'Danh sách kiểm định của thang máy này chưa được lưu trước đó.',
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Lỗi tải dữ liệu kiểm định:', error);
+
+        if (isMounted) {
+          setInspections([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     getInspections();
+
+    return () => {
+      isMounted = false;
+    };
   }, [selectedElevatorId]);
 
   const handlePickFiles = async () => {
@@ -242,27 +332,51 @@ const Inspections = ({ route }: any) => {
       // 5. TẢI LẠI DANH SÁCH KIỂM ĐỊNH
       // =====================================================
 
-      const refreshResponse = await fetch(
-        `${API_URL}/elevators/${elevatorId}/inspections`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
+      try {
+        const refreshResponse = await fetch(
+          `${API_URL}/elevators/${elevatorId}/inspections`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
-        },
-      );
-
-      const refreshData = await refreshResponse.json();
-
-      if (refreshResponse.ok) {
-        setInspections(
-          sortRecordsByDate(refreshData, (item: any) => item.inspectionDate),
         );
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+
+          if (Array.isArray(refreshData)) {
+            const sortedData = sortRecordsByDate(
+              refreshData,
+              (item: any) => item.inspectionDate,
+            );
+
+            setInspections(sortedData);
+
+            const userId = await AsyncStorage.getItem('userId');
+
+            if (userId) {
+              await saveCache(
+                userId,
+                `inspections:${elevatorId}`,
+                sortedData,
+              );
+            }
+          }
+        }
+      } catch (refreshError) {
+        // Bản ghi đã được tạo thành công; lỗi tải lại danh sách không
+        // làm thay đổi kết quả của thao tác thêm kiểm định.
+        console.error('Lỗi tải lại danh sách kiểm định:', refreshError);
       }
     } catch (error) {
       console.error('Lỗi thêm kiểm định:', error);
 
-      Alert.alert('Lỗi kết nối', 'Không thể kết nối tới Backend.');
+      Alert.alert(
+        'Chưa thể lưu kiểm định',
+        'Thao tác thêm kiểm định cần kết nối với máy chủ. Vui lòng thử lại khi có mạng.',
+      );
     } finally {
       setSaving(false);
     }
