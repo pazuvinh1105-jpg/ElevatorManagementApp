@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const API_URL = 'http://127.0.0.1:3000';
+export const API_URL = 'https://liftcare.click';
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await AsyncStorage.getItem('token');
